@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -16,14 +16,22 @@ export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [hydrated, setHydrated] = useState(false)
   const { login } = useStore()
   const { toast } = useToast()
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirectPath = searchParams.get("redirect") || "/"
 
+  // Only run on client after hydration
+  useEffect(() => {
+    setHydrated(true)
+  }, [])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!hydrated) return
+    
     setIsLoading(true)
 
     try {
@@ -42,6 +50,19 @@ export default function LoginPage() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  // Don't render until hydrated on client
+  if (!hydrated) {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="text-2xl">Login</CardTitle>
+          </CardHeader>
+        </Card>
+      </div>
+    )
   }
 
   return (

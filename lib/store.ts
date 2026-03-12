@@ -1,7 +1,15 @@
 import { create } from "zustand"
-import { persist } from "zustand/middleware"
+import { createJSONStorage, persist, StateStorage } from "zustand/middleware"
 import axios, { AxiosRequestConfig } from "axios"
-import { getProducts } from "./api/products"
+
+const storage: StateStorage =
+  typeof window !== "undefined"
+    ? window.localStorage
+    : {
+      getItem: async () => null,
+      setItem: async () => { },
+      removeItem: async () => { },
+    }
 
 // Types
 type User = {
@@ -58,7 +66,7 @@ type CartItem = {
   name: string
   price: number
   discount?: number
-  images:[string]
+  images: [string]
 }
 
 type TryonImage = {
@@ -86,7 +94,7 @@ type StoreState = {
   // Cart state
   cartItems: CartItem[]
   getCartItems: () => Promise<void>
-  addToCart: (product:string, size: string, quantity: number) => Promise<void>
+  addToCart: (product: string, size: string, quantity: number) => Promise<void>
   removeFromCart: (productId: string, size: string, quantity: number) => Promise<void>
   removeProductFromCart: (product: string, size: string) => Promise<void>
   updateQuantity: (productId: string, size: string, quantity: number) => Promise<void>
@@ -111,7 +119,7 @@ type StoreState = {
   deleteOrder: (orderId: string) => Promise<void>
 
   // Products CRUD
-  products:Product[]
+  products: Product[]
   getProducts: (params?: any) => Promise<any>
   getProduct: (productId: string) => Promise<any>
   createProduct: (product: any) => Promise<any>
@@ -154,11 +162,15 @@ const api = axios.create({
 
 // Axios request interceptor for JWT
 api.interceptors.request.use((config) => {
-  const token = getToken()
-  if (token) {
-    config.headers = config.headers || {}
-    config.headers.Authorization = `Bearer ${token}`
+  if (typeof window !== "undefined") {
+    const token = localStorage.getItem(TOKEN_KEY)
+
+    if (token) {
+      config.headers = config.headers || {}
+      config.headers.Authorization = `Bearer ${token}`
+    }
   }
+
   return config
 })
 
@@ -180,7 +192,7 @@ export const useStore = create<StoreState>()(
     (set, get) => ({
       hasHydrated: false,
       setHasHydrated: (hydrated) => {
-        set({hasHydrated: hydrated})
+        set({ hasHydrated: hydrated })
       },
       // Auth state
       user: null,
@@ -199,8 +211,8 @@ export const useStore = create<StoreState>()(
           const user = await apiFetch(`/users/${data.user._id}`)
           console.log("get user response: ", user);
           set({ user })
-          const userCart = await apiFetch('/cart',{
-            method:"GET",
+          const userCart = await apiFetch('/cart', {
+            method: "GET",
           })
         } catch (error) {
           removeToken()
@@ -225,7 +237,7 @@ export const useStore = create<StoreState>()(
       },
       logout: () => {
         removeToken()
-        set({ user: null, cartItems: [], tryonImages:[] })
+        set({ user: null, cartItems: [], tryonImages: [] })
       },
       updateUserProfile: async (data) => {
         set({ isAuthLoading: true })
@@ -244,35 +256,35 @@ export const useStore = create<StoreState>()(
         }
       },
 
-      updateUserImage: async (data:any) => {
-        set({isAuthLoading: true});
+      updateUserImage: async (data: any) => {
+        set({ isAuthLoading: true });
         try {
           const user = get().user;
-          if(!user) throw new Error("Not logged in");
-          
-          const res = await apiFetch(`/users/${user._id}/upload-image`,{
-            method:"POST",
+          if (!user) throw new Error("Not logged in");
+
+          const res = await apiFetch(`/users/${user._id}/upload-image`, {
+            method: "POST",
             data
           })
 
-          set({user:{...user, image:res.url}})
+          set({ user: { ...user, image: res.url } })
         } catch (err) {
           console.log("UpdateUserImage Error :", err);
-        } finally{
-          set({isAuthLoading: false})
+        } finally {
+          set({ isAuthLoading: false })
         }
       },
       // Cart state
       cartItems: [],
       getCartItems: async () => {
-        try{
-          if(!get().user){
+        try {
+          if (!get().user) {
             console.error("not logged in");
           }
           const res = await apiFetch("/cart");
-          set({cartItems:res.items});
+          set({ cartItems: res.items });
           console.log("GetCartItems Response: ", res);
-        }catch(err){
+        } catch (err) {
           console.error("getCartItems Error :", err);
           throw err;
         }
@@ -288,8 +300,8 @@ export const useStore = create<StoreState>()(
             },
           })
           const res = await apiFetch("/cart")
-          set({cartItems: res.items})
-          
+          set({ cartItems: res.items })
+
         } catch (error) {
           console.error(error)
           throw error
@@ -302,18 +314,18 @@ export const useStore = create<StoreState>()(
             data: { product: productId, size, quantity },
           })
           // remove the item from the persistence as well
-          const newCartItems = get().cartItems.map((item)=> {
-            if(item.product === productId){
-              if(item.quantity === 1){
-                const itemsLeft:CartItem[] = get().cartItems.filter(item => item.product !== productId);
-                set({cartItems: itemsLeft.length >= 1 ? itemsLeft : []});
+          const newCartItems = get().cartItems.map((item) => {
+            if (item.product === productId) {
+              if (item.quantity === 1) {
+                const itemsLeft: CartItem[] = get().cartItems.filter(item => item.product !== productId);
+                set({ cartItems: itemsLeft.length >= 1 ? itemsLeft : [] });
               }
-              return {...item, quantity: item.quantity-quantity}
+              return { ...item, quantity: item.quantity - quantity }
             }
             return item;
           }).filter((item) => item !== undefined);
-          
-          set({cartItems: newCartItems});
+
+          set({ cartItems: newCartItems });
           // const res = await apiFetch("/cart")
           // set({cartItems: res.items})
         } catch (error) {
@@ -321,15 +333,15 @@ export const useStore = create<StoreState>()(
           throw error
         }
       },
-      removeProductFromCart : async (product, size) => {
+      removeProductFromCart: async (product, size) => {
         const removed = await apiFetch("/cart/remove-product", {
-          method:"POST",
-          data:{product, size}
+          method: "POST",
+          data: { product, size }
         })
-        
+
         const newCartItems = get().cartItems.filter(item => !(item.product === product && item.size === size));
 
-        set({ cartItems: newCartItems})
+        set({ cartItems: newCartItems })
       },
       updateQuantity: async (productId, size, quantity) => {
         await get().removeFromCart(
@@ -348,8 +360,8 @@ export const useStore = create<StoreState>()(
         for (const item of cartItems) {
           try {
             // use clear cart endpoint
-            await apiFetch("/cart/clear",{
-              method:"POST"
+            await apiFetch("/cart/clear", {
+              method: "POST"
             })
           } catch (error) {
             console.error(error)
@@ -399,7 +411,7 @@ export const useStore = create<StoreState>()(
         })
 
         // set the products array to new products with tryon images of the user
-        set({products: tryonProductImages});
+        set({ products: tryonProductImages });
       },
       generateTryon: async (productId) => {
         set({ isTryonLoading: true, tryonError: null })
@@ -409,19 +421,19 @@ export const useStore = create<StoreState>()(
             data: { product: productId },
           })
           // the product tryon already exists update the image
-          if(get().tryonImages.find(item => item.product == productId)){
+          if (get().tryonImages.find(item => item.product == productId)) {
             const newTryonImages = get().tryonImages.map(item => {
-              if(item.product === productId){
+              if (item.product === productId) {
                 return {
                   ...item,
-                  image:data.image
+                  image: data.image
                 }
               }
               return item;
             })
-            set({tryonImages: newTryonImages});
+            set({ tryonImages: newTryonImages });
           }
-          
+
           set((state) => ({ tryonImages: [...state.tryonImages, data] }))
           console.log("generateTryon Res ", data);
           return data
@@ -443,7 +455,7 @@ export const useStore = create<StoreState>()(
             method: "POST",
             data: { products, shippingAddress, notes },
           })
-          return data 
+          return data
         } catch (error) {
           throw error
         }
@@ -485,12 +497,12 @@ export const useStore = create<StoreState>()(
       },
 
       // Products CRUD
-      products:[],
+      products: [],
       getProducts: async (params) => {
         try {
-          const query:any = params ? "?" + new URLSearchParams(params).toString() : ""
+          const query: any = params ? "?" + new URLSearchParams(params).toString() : ""
           const data = await apiFetch(`/products${query}`)
-          set({products: data.products})
+          set({ products: data.products })
           console.log("getProducts res: ", data);
           return data;
         } catch (error) {
@@ -511,8 +523,8 @@ export const useStore = create<StoreState>()(
         try {
           const data = await apiFetch("/products", {
             method: "POST",
-            headers:{
-              'Content-Type':"multipart/form-data"
+            headers: {
+              'Content-Type': "multipart/form-data"
             },
             data: product,
           })
@@ -578,9 +590,11 @@ export const useStore = create<StoreState>()(
     }),
     {
       name: "tryon-store",
+      storage: createJSONStorage(() => storage),
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true)
       },
+      skipHydration: typeof window === "undefined",
       partialize: (state) => ({
         user: state.user,
         cartItems: state.cartItems,
