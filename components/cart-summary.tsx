@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { useAuth } from "@clerk/nextjs"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
@@ -11,12 +12,13 @@ import { useStore } from "@/lib/store"
 
 export default function CartSummary() {
   const [isProcessing, setIsProcessing] = useState(false)
-  const { user, cartItems, calculateSubtotal, calculateTotal } = useStore()
+  const { cartItems, calculatePricingBreakdown } = useStore()
+  const { isLoaded, isSignedIn } = useAuth()
   const { toast } = useToast()
   const router = useRouter()
 
   const handleCheckout = () => {
-    if (!user) {
+    if (!isLoaded || !isSignedIn) {
       toast({
         title: "Login required",
         description: "Please login to proceed to checkout.",
@@ -38,10 +40,7 @@ export default function CartSummary() {
     router.push("/checkout")
   }
 
-  const subtotal = calculateSubtotal()
-  const shipping = subtotal > 100 ? 0 : 10
-  const tax = subtotal * 0.08 // 8% tax
-  const total = calculateTotal()
+  const { subtotal, shipping, tax, total } = calculatePricingBreakdown()
 
   return (
     <Card>
@@ -68,7 +67,7 @@ export default function CartSummary() {
         </div>
       </CardContent>
       <CardFooter>
-        <Button className="w-full" onClick={handleCheckout} disabled={isProcessing || cartItems.length === 0}>
+        <Button className="w-full" onClick={handleCheckout} disabled={!isLoaded || isProcessing || cartItems.length === 0}>
           {isProcessing ? "Processing..." : "Proceed to Checkout"}
         </Button>
       </CardFooter>

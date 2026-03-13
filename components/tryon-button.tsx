@@ -128,12 +128,12 @@ export default function TryonButton({ productId, productName }: TryonButtonProps
 
           <div className="flex flex-col items-center justify-center py-4">
             {isTryonLoading ? (
-              <div className="flex flex-col items-center justify-center h-[400px]">
+              <div className="flex flex-col items-center justify-center h-100">
                 <Loader2 className="h-8 w-8 animate-spin mb-2" />
                 <p>Generating your try-on...</p>
               </div>
             ) : existingTryon ? (
-              <div className="relative h-[400px] w-full">
+              <div className="relative h-100 w-full">
                 <Image
                   src={existingTryon.image || "/placeholder.svg"}
                   alt={`Virtual try-on for ${productName}`}

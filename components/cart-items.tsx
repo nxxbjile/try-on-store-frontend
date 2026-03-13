@@ -12,10 +12,14 @@ export default function CartItems() {
   const { cartItems, addToCart, removeFromCart, removeProductFromCart, getCartItems } = useStore()
   useEffect(()=>{
     const getCart = async ()=>{
-      await getCartItems();
+      try {
+        await getCartItems()
+      } catch {
+        // Errors are handled in store/UI flows.
+      }
     }
-    getCart();
-  },[])
+    void getCart()
+  }, [getCartItems])
 
   if (cartItems.length === 0) {
     return (
@@ -40,7 +44,7 @@ export default function CartItems() {
             key={`${item.product}-${item.size}`}
             className="flex flex-col sm:flex-row gap-4 border-b pb-6"
           >
-            <div className="relative h-24 w-24 rounded-md overflow-hidden flex-shrink-0">
+            <div className="relative h-24 w-24 rounded-md overflow-hidden shrink-0">
               <Image
                 src={item.images[0] || "/placeholder.svg?height=96&width=96"}
                 alt={item.name}
@@ -94,7 +98,7 @@ export default function CartItems() {
                 </Button>
               </div>
 
-              <div className="text-right min-w-[80px]">
+              <div className="text-right min-w-20">
                 <div className="font-medium">{formatPrice(totalPrice)}</div>
               </div>
 

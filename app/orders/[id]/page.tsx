@@ -1,7 +1,8 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter, useParams } from "next/navigation"
+import { useParams } from "next/navigation"
+import { useAuth } from "@clerk/nextjs"
 import Header from "@/components/header"
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -18,8 +19,8 @@ import { Order, OrderStatus } from "../page"
 import { useToast } from "@/hooks/use-toast"
 
 export default function OrderDetailPage () {
-  const { user, isAuthLoading: isLoading, hasHydrated, getOrder, updateOrder } = useStore()
-  const router = useRouter()
+  const { getOrder, updateOrder } = useStore()
+  const { isLoaded, isSignedIn } = useAuth()
   const [order, setOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(true)
   const [orderCancelLoading, setOrderCancelLoading] = useState<boolean>(false);
@@ -48,12 +49,14 @@ export default function OrderDetailPage () {
   }
 
    useEffect(() => {
-      if (!hasHydrated) return
+      if (!isLoaded) return
+
       const fetchOrders = async () => {
-        if (!user) {
-          router.push("/login?redirect=/orders")
+        if (!isSignedIn) {
+          setLoading(false)
           return
         }
+
         setLoading(true)
         try {
           const fetched = await getOrder(params.id as string)
@@ -64,8 +67,9 @@ export default function OrderDetailPage () {
           setLoading(false)
         }
       }
-      fetchOrders()
-    }, [user, router, hasHydrated, params.id ])
+
+      void fetchOrders()
+    }, [getOrder, isLoaded, isSignedIn, params.id])
 
   const getStatusIcon = (status: OrderStatus) => {
     switch (status) {
@@ -135,7 +139,7 @@ export default function OrderDetailPage () {
 
   // Estimate shipping and tax
   const shipping = subtotal > 100 ? 0 : 10
-  const tax = subtotal * 0.08 // 8% tax
+  const tax = subtotal * 0.18 // 18% tax
 
   return (
     <main className="min-h-screen">
@@ -205,7 +209,7 @@ export default function OrderDetailPage () {
                     return (
                       <div key={index}>
                         <div className="flex flex-col sm:flex-row items-start gap-4">
-                          <div className="relative h-20 w-20 rounded-md overflow-hidden flex-shrink-0">
+                          <div className="relative h-20 w-20 rounded-md overflow-hidden shrink-0">
                             <Image
                               src={item.image || "/placeholder.svg?height=80&width=80"}
                               alt={item.name}

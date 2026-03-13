@@ -5,6 +5,9 @@ import type React from "react"
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { useAuth, useClerk, useUser } from "@clerk/nextjs"
+import { setAuthTokenGetter, setInMemoryAuthToken } from "@/lib/api/client"
+import { syncBackendUserProfile } from "@/lib/api/user-sync"
 import { Search, User, ShoppingCart, Sun, Moon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -19,14 +22,55 @@ export default function Header() {
   const mobileInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
   const { theme, setTheme } = useTheme()
-  const { user, logout, cartItems, getCartItems } = useStore()
+  const { cartItems, getCartItems } = useStore()
+  const { isLoaded, isSignedIn, getToken } = useAuth()
+  const { signOut } = useClerk()
+  const { user } = useUser()
+  const role =
+    (typeof user?.publicMetadata?.role === "string" && user.publicMetadata.role) ||
+    (typeof user?.unsafeMetadata?.role === "string" && user.unsafeMetadata.role) ||
+    null
 
   // Fix hydration mismatch for theme icon
   const [mounted, setMounted] = useState(false)
   useEffect(() => {
     setMounted(true)
-    getCartItems();
   }, [])
+
+  useEffect(() => {
+    const syncToken = async () => {
+      if (!isLoaded) return
+
+      if (!isSignedIn) {
+        setAuthTokenGetter(null)
+        setInMemoryAuthToken(null)
+        useStore.setState({ user: null, cartItems: [], tryonImages: [] })
+        return
+      }
+
+      setAuthTokenGetter(() => getToken())
+
+      const token = await getToken()
+      if (token) {
+        try {
+          await syncBackendUserProfile(token, {
+            name: user?.fullName || undefined,
+            email: user?.primaryEmailAddress?.emailAddress || undefined,
+          })
+        } catch {
+          // Sync may temporarily fail; middleware and later actions can retry.
+        }
+
+        try {
+          await getCartItems()
+        } catch {
+          // Cart prefetch should not break header rendering.
+        }
+      }
+    }
+
+    void syncToken()
+  }, [getCartItems, getToken, isLoaded, isSignedIn, user?.fullName, user?.primaryEmailAddress?.emailAddress])
 
   useEffect(() => {
     if (showMobileSearch && mobileInputRef.current) {
@@ -42,8 +86,15 @@ export default function Header() {
     }
   }
 
+  const handleLogout = async () => {
+    setAuthTokenGetter(null)
+    setInMemoryAuthToken(null)
+    useStore.setState({ user: null, cartItems: [], tryonImages: [] })
+    await signOut({ redirectUrl: "/" })
+  }
+
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
       <div className="container flex h-16 items-center justify-between px-4">
         {/* Mobile search: when visible, hide logo/sidebar and span input full width */}
         {showMobileSearch ? (
@@ -106,7 +157,7 @@ export default function Header() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  {user ? (
+                  {isSignedIn ? (
                     <>
                       <DropdownMenuItem asChild>
                         <Link href="/profile">Profile</Link>
@@ -114,12 +165,12 @@ export default function Header() {
                       <DropdownMenuItem asChild>
                         <Link href="/orders">My Orders</Link>
                       </DropdownMenuItem>
-                      {user.role === "admin" && (
+                      {role === "admin" && (
                         <DropdownMenuItem asChild>
                           <Link href="/admin">Admin Dashboard</Link>
                         </DropdownMenuItem>
                       )}
-                      <DropdownMenuItem onClick={logout}>Logout</DropdownMenuItem>
+                      <DropdownMenuItem onClick={handleLogout}>Logout</DropdownMenuItem>
                     </>
                   ) : (
                     <>

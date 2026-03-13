@@ -2,8 +2,9 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import { useAuth, useUser } from "@clerk/nextjs"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -11,25 +12,79 @@ import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
+import { fetchBackendUserProfile } from "@/lib/api/user-sync"
 import { useStore } from "@/lib/store"
 
 export default function CheckoutForm() {
-  const { user, cartItems, clearCart, createOrder } = useStore();
+  const { cartItems, clearCart, createOrder } = useStore();
+  const { user } = useUser()
+  const { isLoaded, isSignedIn, getToken } = useAuth()
   const { toast } = useToast()
   const router = useRouter()
 
   const [formData, setFormData] = useState({
-    name: user?.name || "",
-    email: user?.email || "",
-    address: user?.address || "",
+    name: "",
+    email: "",
+    address: "",
     state: "Delhi / New Delhi Only",
     zipCode: "",
-    phone: user?.phone || "",
+    phone: "",
     paymentMethod: "cash",
     notes: "",
   })
 
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn || !user) return
+
+    let cancelled = false
+
+    const loadCheckoutProfile = async () => {
+      const baseData = {
+        name: user.fullName || "",
+        email: user.primaryEmailAddress?.emailAddress || "",
+      }
+
+      try {
+        const token = await getToken()
+
+        if (!token) {
+          if (!cancelled) {
+            setFormData((prev) => ({
+              ...prev,
+              ...baseData,
+            }))
+          }
+          return
+        }
+
+        const backendProfile = await fetchBackendUserProfile(token)
+
+        if (!cancelled) {
+          setFormData((prev) => ({
+            ...prev,
+            ...baseData,
+            address: backendProfile.address || "",
+            phone: backendProfile.phone || "",
+          }))
+        }
+      } catch {
+        if (!cancelled) {
+          setFormData((prev) => ({
+            ...prev,
+            ...baseData,
+          }))
+        }
+      }
+    }
+
+    void loadCheckoutProfile()
+
+    return () => {
+      cancelled = true
+    }
+  }, [getToken, isLoaded, isSignedIn, user])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -42,6 +97,17 @@ export default function CheckoutForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (!isSignedIn) {
+      toast({
+        title: "Login required",
+        description: "Please login to proceed to checkout.",
+        variant: "destructive",
+      })
+      router.push("/login?redirect=/checkout")
+      return
+    }
+
     setIsSubmitting(true)
 
     try {

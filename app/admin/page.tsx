@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { useAuth, useUser } from "@clerk/nextjs"
 import Header from "@/components/header"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -13,13 +14,12 @@ import CustomersList from "@/components/admin/customers-list"
 import CategoriesList from "@/components/admin/categories-list"
 import AnalyticsDashboard from "@/components/admin/analytics-dashboard"
 import SettingsPanel from "@/components/admin/settings-panel"
-import { useStore } from "@/lib/store"
 
 export default function AdminDashboard() {
-  const { user, isAuthLoading: isLoading, hasHydrated } = useStore()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [isAuthorized, setIsAuthorized] = useState(false)
+  const { isLoaded, isSignedIn } = useAuth()
+  const { user } = useUser()
 
   // Get tab from URL or default to "dashboard"
   const [activeTab, setActiveTab] = useState("dashboard")
@@ -29,18 +29,10 @@ export default function AdminDashboard() {
     setActiveTab(tabParam || "dashboard")
   },[searchParams])
 
-  useEffect(() => {
-    if(!hasHydrated) return
-    if (!isLoading) {
-      if (!user) {
-        router.push("/login?redirect=/admin")
-      } else if (user.role !== "admin") {
-        router.push("/")
-      } else {
-        setIsAuthorized(true)
-      }
-    }
-  }, [user, isLoading, router])
+  const role =
+    (typeof user?.publicMetadata?.role === "string" && user.publicMetadata.role) ||
+    (typeof user?.unsafeMetadata?.role === "string" && user.unsafeMetadata.role) ||
+    null
 
   // Update URL when tab changes
   const handleTabChange = (value: string) => {
@@ -48,7 +40,7 @@ export default function AdminDashboard() {
     router.push(`/admin?tab=${value}`, { scroll: false })
   }
 
-  if (isLoading || !isAuthorized) {
+  if (!isLoaded || !isSignedIn || role !== "admin") {
     return (
       <main className="min-h-screen">
         <Header />

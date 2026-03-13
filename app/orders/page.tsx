@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useAuth } from "@clerk/nextjs"
 import Header from "@/components/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -40,19 +40,21 @@ export type Order = {
 }
 
 export default function OrdersPage() {
-  const { user, getOrders, hasHydrated } = useStore();
+  const { getOrders } = useStore();
+  const { isLoaded, isSignedIn } = useAuth()
   const [isLoading, setIsLoading] = useState(true);
-  const router = useRouter()
   const [orders, setOrders] = useState<Order[]>([])
   const [activeTab, setActiveTab] = useState<string>("all")
 
   useEffect(() => {
-    if (!hasHydrated) return
+    if (!isLoaded) return
+
     const fetchOrders = async () => {
-      if (!user) {
-        router.push("/login?redirect=/orders")
+      if (!isSignedIn) {
+        setIsLoading(false)
         return
       }
+
       try {
         const fetched = await getOrders()
         setOrders(fetched.orders)
@@ -62,8 +64,8 @@ export default function OrdersPage() {
         setIsLoading(false)
       }
     }
-    fetchOrders()
-  }, [user, router, hasHydrated])
+    void fetchOrders()
+  }, [getOrders, isLoaded, isSignedIn])
   
 
   const filteredOrders = activeTab === "all" ? orders : orders.filter((order) => order.status === activeTab)

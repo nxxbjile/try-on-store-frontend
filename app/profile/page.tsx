@@ -3,7 +3,9 @@
 import type React from "react"
 
 import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useAuth, useUser } from "@clerk/nextjs"
+import { fetchBackendUserProfile, syncBackendUserProfile } from "@/lib/api/user-sync"
+import { useStore } from "@/lib/store"
 import Header from "@/components/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -16,11 +18,11 @@ import { Camera } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import NoticeBar from "@/components/notice-bar"
 import Sidebar from "@/components/sidebar"
-import { useStore } from "@/lib/store"
 
 export default function ProfilePage() {
-  const { user, isAuthLoading, updateUserProfile, updateUserImage } = useStore()
-  const router = useRouter()
+  const { user, isLoaded } = useUser()
+  const { getToken } = useAuth()
+  const { updateUserImage } = useStore()
   const { toast } = useToast()
   const [isImageDialogOpen, setIsImageDialogOpen] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -28,23 +30,72 @@ export default function ProfilePage() {
   const [profileData, setProfileData] = useState({
     name: "",
     email: "",
+    image: "",
     address: "",
     phone: "",
   })
   const [isUpdating, setIsUpdating] = useState(false)
 
   useEffect(() => {
-    if (!isAuthLoading && !user) {
-      router.push("/login?redirect=/profile")
-    } else if (user) {
-      setProfileData({
-        name: user.name || "",
-        email: user.email || "",
-        address: user.address || "",
-        phone: user.phone || "",
-      })
+    if (!user) return
+
+    let isCancelled = false
+
+    const loadProfile = async () => {
+      // Name/email come from Clerk identity.
+      const baseProfile = {
+        name: user.fullName || "",
+        email: user.primaryEmailAddress?.emailAddress || "",
+      }
+
+      try {
+        const token = await getToken()
+
+        if (!token) {
+          if (!isCancelled) {
+            setProfileData({
+              ...baseProfile,
+              image: "",
+              address: "",
+              phone: "",
+            })
+          }
+          return
+        }
+
+        const backendProfile = await fetchBackendUserProfile(token)
+
+        if (!isCancelled) {
+          setProfileData({
+            ...baseProfile,
+            image: backendProfile.image || "",
+            address: backendProfile.address || "",
+            phone: backendProfile.phone || "",
+          })
+        }
+      } catch {
+        if (!isCancelled) {
+          setProfileData({
+            ...baseProfile,
+            image: "",
+            address: "",
+            phone: "",
+          })
+          toast({
+            title: "Profile sync warning",
+            description: "Could not load address and phone from backend.",
+            variant: "destructive",
+          })
+        }
+      }
     }
-  }, [user, isAuthLoading, router])
+
+    void loadProfile()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [getToken, toast, user])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -53,10 +104,32 @@ export default function ProfilePage() {
 
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!user) return
+
     setIsUpdating(true)
 
     try {
-      await updateUserProfile(profileData)
+      const token = await getToken()
+      if (!token) {
+        throw new Error("Authentication required")
+      }
+
+      const [firstName, ...rest] = profileData.name.trim().split(" ")
+      const lastName = rest.join(" ").trim() || null
+
+      await user.update({
+        firstName,
+        lastName,
+      })
+
+      await syncBackendUserProfile(token, {
+        name: profileData.name,
+        email: profileData.email,
+        image: profileData.image,
+        address: profileData.address,
+        phone: profileData.phone,
+      })
+
       toast({
         title: "Profile updated",
         description: "Your profile has been updated successfully.",
@@ -90,10 +163,13 @@ export default function ProfilePage() {
     if (!selectedFile) return
 
     try {
-      // Update user profile with new image URL
-      const formData = new FormData();
-      formData.append("file", selectedFile);
-      updateUserImage(formData);
+      const formData = new FormData()
+      formData.append("file", selectedFile)
+
+      const uploadedUrl = await updateUserImage(formData)
+      if (uploadedUrl) {
+        setProfileData((prev) => ({ ...prev, image: uploadedUrl }))
+      }
 
       toast({
         title: "Image uploaded",
@@ -109,7 +185,7 @@ export default function ProfilePage() {
     }
   }
 
-  if (isAuthLoading || !user) {
+  if (!isLoaded || !user) {
     return (
       <main className="min-h-screen">
         <Header />
@@ -142,8 +218,8 @@ export default function ProfilePage() {
                   <div className="mt-4 md:mt-0 flex items-center">
                     <div className="relative">
                       <Avatar className="h-20 w-20">
-                        <AvatarImage src={user.image || "/placeholder.svg"} alt={user.name} />
-                        <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+                          <AvatarImage src={profileData.image || "/placeholder.svg"} alt={user.fullName || "User"} />
+                          <AvatarFallback>{(user.fullName || "U").charAt(0)}</AvatarFallback>
                       </Avatar>
                       <Button
                         size="icon"
@@ -177,7 +253,7 @@ export default function ProfilePage() {
                             name="email"
                             type="email"
                             value={profileData.email}
-                            onChange={handleChange}
+                            disabled
                           />
                         </div>
                       </div>
@@ -228,8 +304,8 @@ export default function ProfilePage() {
                 </div>
               ) : (
                 <Avatar className="h-40 w-40">
-                  <AvatarImage src={user.image || "/placeholder.svg"} alt={user.name} />
-                  <AvatarFallback>{user.name.charAt(0)}</AvatarFallback>
+                  <AvatarImage src={profileData.image || "/placeholder.svg"} alt={user.fullName || "User"} />
+                  <AvatarFallback>{(user.fullName || "U").charAt(0)}</AvatarFallback>
                 </Avatar>
               )}
             </div>

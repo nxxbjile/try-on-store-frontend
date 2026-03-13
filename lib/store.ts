@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import { createJSONStorage, persist, StateStorage } from "zustand/middleware"
-import axios, { AxiosRequestConfig } from "axios"
+import { apiRequest, setInMemoryAuthToken } from "@/lib/api/client"
 
 const storage: StateStorage =
   typeof window !== "undefined"
@@ -10,6 +10,42 @@ const storage: StateStorage =
       setItem: async () => { },
       removeItem: async () => { },
     }
+
+
+const TAX_RATE = 0.18
+const SHIPPING_FEE = 0
+
+const roundCurrency = (value: number) => Math.round(value * 100) / 100
+
+type PricingBreakdown = {
+  subtotal: number
+  shipping: number
+  tax: number
+  total: number
+}
+
+function calculateCartPricing(cartItems: CartItem[]): PricingBreakdown {
+  const subtotal = roundCurrency(
+    cartItems.reduce((total, item) => {
+      // If discount is "20" => 20%, if "0.2" => 20%
+      const normalizedDiscount = item.discount
+        ? item.discount > 1
+          ? item.discount / 100
+          : item.discount
+        : 0
+
+      const itemPrice = item.price * (1 - normalizedDiscount)
+      return total + itemPrice * item.quantity
+    }, 0),
+  )
+
+  const shipping = SHIPPING_FEE
+  const tax = roundCurrency(subtotal * TAX_RATE)
+  const total = roundCurrency(subtotal + shipping + tax)
+
+  return { subtotal, shipping, tax, total }
+}
+
 
 // Types
 type User = {
@@ -89,7 +125,7 @@ type StoreState = {
   register: (data: RegisterData) => Promise<void>
   logout: () => void
   updateUserProfile: (data: UpdateProfileData) => Promise<void>
-  updateUserImage: (data: any) => Promise<void>
+  updateUserImage: (data: any) => Promise<string | null>
 
   // Cart state
   cartItems: CartItem[]
@@ -99,6 +135,7 @@ type StoreState = {
   removeProductFromCart: (product: string, size: string) => Promise<void>
   updateQuantity: (productId: string, size: string, quantity: number) => Promise<void>
   clearCart: () => Promise<void>
+  calculatePricingBreakdown: () => PricingBreakdown
   calculateSubtotal: () => number
   calculateTotal: () => number
 
@@ -142,50 +179,6 @@ type StoreState = {
   setTheme: (theme: "light" | "dark" | "system") => void
 }
 
-// Helper to get/set/remove JWT token in localStorage
-const TOKEN_KEY = "tryon_jwt"
-function setToken(token: string) {
-  if (typeof window !== "undefined") localStorage.setItem(TOKEN_KEY, token)
-}
-function getToken() {
-  if (typeof window !== "undefined") return localStorage.getItem(TOKEN_KEY)
-  return null
-}
-function removeToken() {
-  if (typeof window !== "undefined") localStorage.removeItem(TOKEN_KEY)
-}
-
-// Axios instance with baseURL from env variable
-const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3001/api/v1"
-})
-
-// Axios request interceptor for JWT
-api.interceptors.request.use((config) => {
-  if (typeof window !== "undefined") {
-    const token = localStorage.getItem(TOKEN_KEY)
-
-    if (token) {
-      config.headers = config.headers || {}
-      config.headers.Authorization = `Bearer ${token}`
-    }
-  }
-
-  return config
-})
-
-// Helper for API requests
-async function apiFetch(path: string, options: AxiosRequestConfig = {}) {
-  try {
-    const res = await api({ url: path, ...options })
-    return res.data
-  } catch (err: any) {
-    console.error(err)
-    const message = (err.response && err.response.data?.message) || err.message || "API Error"
-    throw new Error(message)
-  }
-}
-
 // Create store with persistence
 export const useStore = create<StoreState>()(
   persist(
@@ -200,22 +193,22 @@ export const useStore = create<StoreState>()(
       login: async (email, password) => {
         set({ isAuthLoading: true })
         try {
-          const data = await apiFetch("/users/login", {
+          const data = await apiRequest("/users/login", {
             method: "POST",
             data: { email, password },
           })
 
           console.log("login response: ", data);
-          setToken(data.token)
+          setInMemoryAuthToken(data.token)
           console.log("token: ", data.token);
-          const user = await apiFetch(`/users/${data.user._id}`)
+          const user = await apiRequest(`/users/${data.user._id}`)
           console.log("get user response: ", user);
           set({ user })
-          const userCart = await apiFetch('/cart', {
+          const userCart = await apiRequest('/cart', {
             method: "GET",
           })
         } catch (error) {
-          removeToken()
+          setInMemoryAuthToken(null)
           set({ user: null })
           throw error
         } finally {
@@ -225,7 +218,7 @@ export const useStore = create<StoreState>()(
       register: async (data) => {
         set({ isAuthLoading: true })
         try {
-          await apiFetch("/users/register", {
+          await apiRequest("/users/register", {
             method: "POST",
             data,
           })
@@ -236,7 +229,7 @@ export const useStore = create<StoreState>()(
         }
       },
       logout: () => {
-        removeToken()
+        setInMemoryAuthToken(null)
         set({ user: null, cartItems: [], tryonImages: [] })
       },
       updateUserProfile: async (data) => {
@@ -244,7 +237,7 @@ export const useStore = create<StoreState>()(
         try {
           const user = get().user
           if (!user) throw new Error("Not logged in")
-          const updated = await apiFetch(`/users/${user._id}`, {
+          const updated = await apiRequest(`/users/${user._id}`, {
             method: "PATCH",
             data,
           })
@@ -259,17 +252,29 @@ export const useStore = create<StoreState>()(
       updateUserImage: async (data: any) => {
         set({ isAuthLoading: true });
         try {
-          const user = get().user;
-          if (!user) throw new Error("Not logged in");
+          const currentUser = await apiRequest("/users/me", {
+            method: "GET",
+          })
+          const userId = currentUser?._id
 
-          const res = await apiFetch(`/users/${user._id}/upload-image`, {
+          if (!userId) {
+            throw new Error("User profile not found")
+          }
+
+          const res = await apiRequest(`/users/${userId}/upload-image`, {
             method: "POST",
             data
           })
 
-          set({ user: { ...user, image: res.url } })
+          const storeUser = get().user
+          if (storeUser) {
+            set({ user: { ...storeUser, image: res.url } })
+          }
+
+          return typeof res?.url === "string" ? res.url : null
         } catch (err) {
           console.log("UpdateUserImage Error :", err);
+          throw err
         } finally {
           set({ isAuthLoading: false })
         }
@@ -278,20 +283,27 @@ export const useStore = create<StoreState>()(
       cartItems: [],
       getCartItems: async () => {
         try {
-          if (!get().user) {
-            console.error("not logged in");
+          const res = await apiRequest("/cart")
+          set({ cartItems: res.items })
+        } catch (err: any) {
+          const message = err?.message?.toLowerCase?.() || ""
+          const isAuthError =
+            message.includes("authentication required") ||
+            message.includes("unauthorized") ||
+            message.includes("401") ||
+            message.includes("not logged in")
+
+          if (isAuthError) {
+            set({ cartItems: [] })
+            return
           }
-          const res = await apiFetch("/cart");
-          set({ cartItems: res.items });
-          console.log("GetCartItems Response: ", res);
-        } catch (err) {
-          console.error("getCartItems Error :", err);
-          throw err;
+
+          throw err
         }
       },
       addToCart: async (product, size, quantity) => {
         try {
-          await apiFetch("/cart/add", {
+          await apiRequest("/cart/add", {
             method: "POST",
             data: {
               product,
@@ -299,7 +311,7 @@ export const useStore = create<StoreState>()(
               quantity,
             },
           })
-          const res = await apiFetch("/cart")
+          const res = await apiRequest("/cart")
           set({ cartItems: res.items })
 
         } catch (error) {
@@ -309,7 +321,7 @@ export const useStore = create<StoreState>()(
       },
       removeFromCart: async (productId, size, quantity = 1) => {
         try {
-          const removed = await apiFetch("/cart/remove", {
+          const removed = await apiRequest("/cart/remove", {
             method: "POST",
             data: { product: productId, size, quantity },
           })
@@ -326,7 +338,7 @@ export const useStore = create<StoreState>()(
           }).filter((item) => item !== undefined);
 
           set({ cartItems: newCartItems });
-          // const res = await apiFetch("/cart")
+          // const res = await apiRequest("/cart")
           // set({cartItems: res.items})
         } catch (error) {
           console.error(error)
@@ -334,7 +346,7 @@ export const useStore = create<StoreState>()(
         }
       },
       removeProductFromCart: async (product, size) => {
-        const removed = await apiFetch("/cart/remove-product", {
+        const removed = await apiRequest("/cart/remove-product", {
           method: "POST",
           data: { product, size }
         })
@@ -360,7 +372,7 @@ export const useStore = create<StoreState>()(
         for (const item of cartItems) {
           try {
             // use clear cart endpoint
-            await apiFetch("/cart/clear", {
+            await apiRequest("/cart/clear", {
               method: "POST"
             })
           } catch (error) {
@@ -369,18 +381,14 @@ export const useStore = create<StoreState>()(
         }
         set({ cartItems: [] })
       },
+      calculatePricingBreakdown: () => {
+        return calculateCartPricing(get().cartItems)
+      },
       calculateSubtotal: () => {
-        const cartItems = get().cartItems
-        return cartItems.reduce((total, item) => {
-          const itemPrice = item.discount ? item.price * (1 - item.discount / 100) : item.price
-          return total + itemPrice * item.quantity
-        }, 0)
+        return get().calculatePricingBreakdown().subtotal
       },
       calculateTotal: () => {
-        const subtotal = get().calculateSubtotal()
-        const shipping = subtotal > 100 ? 0 : 10
-        const tax = subtotal * 0.08
-        return subtotal + shipping + tax
+        return get().calculatePricingBreakdown().total
       },
 
       // Try-on state
@@ -391,7 +399,7 @@ export const useStore = create<StoreState>()(
         try {
           const user = get().user
           if (!user) return null
-          const data = await apiFetch(`/tryon/all?user=${user._id}`)
+          const data = await apiRequest(`/tryon/all?user=${user._id}`)
           console.log("getTryons res : ", data);
           set({ tryonImages: data })
           return data
@@ -416,7 +424,7 @@ export const useStore = create<StoreState>()(
       generateTryon: async (productId) => {
         set({ isTryonLoading: true, tryonError: null })
         try {
-          const data = await apiFetch("/tryon", {
+          const data = await apiRequest("/tryon", {
             method: "POST",
             data: { product: productId },
           })
@@ -451,7 +459,7 @@ export const useStore = create<StoreState>()(
       // Orders CRUD
       createOrder: async (products, shippingAddress, notes = "") => {
         try {
-          const data = await apiFetch("/orders", {
+          const data = await apiRequest("/orders", {
             method: "POST",
             data: { products, shippingAddress, notes },
           })
@@ -463,7 +471,7 @@ export const useStore = create<StoreState>()(
       getOrders: async (params?: Record<string, any>) => {
         try {
           const query = params ? "?" + new URLSearchParams(params).toString() : "";
-          const data = await apiFetch(`/orders${query}`)
+          const data = await apiRequest(`/orders${query}`)
           return data
         } catch (error) {
           throw error
@@ -471,7 +479,7 @@ export const useStore = create<StoreState>()(
       },
       getOrder: async (orderId) => {
         try {
-          const data = await apiFetch(`/orders/${orderId}`)
+          const data = await apiRequest(`/orders/${orderId}`)
           return data
         } catch (error) {
           throw error
@@ -479,7 +487,7 @@ export const useStore = create<StoreState>()(
       },
       updateOrder: async (orderId, update) => {
         try {
-          const data = await apiFetch(`/orders/${orderId}`, {
+          const data = await apiRequest(`/orders/${orderId}`, {
             method: "PATCH",
             data: update,
           })
@@ -490,7 +498,7 @@ export const useStore = create<StoreState>()(
       },
       deleteOrder: async (orderId) => {
         try {
-          await apiFetch(`/orders/${orderId}`, { method: "DELETE" })
+          await apiRequest(`/orders/${orderId}`, { method: "DELETE" })
         } catch (error) {
           throw error
         }
@@ -501,7 +509,7 @@ export const useStore = create<StoreState>()(
       getProducts: async (params) => {
         try {
           const query: any = params ? "?" + new URLSearchParams(params).toString() : ""
-          const data = await apiFetch(`/products${query}`)
+          const data = await apiRequest(`/products${query}`)
           set({ products: data.products })
           console.log("getProducts res: ", data);
           return data;
@@ -512,7 +520,7 @@ export const useStore = create<StoreState>()(
       },
       getProduct: async (productId) => {
         try {
-          const data = await apiFetch(`/products/${productId}`)
+          const data = await apiRequest(`/products/${productId}`)
           return data
         } catch (error) {
           console.error(error)
@@ -521,7 +529,7 @@ export const useStore = create<StoreState>()(
       },
       createProduct: async (product) => {
         try {
-          const data = await apiFetch("/products", {
+          const data = await apiRequest("/products", {
             method: "POST",
             headers: {
               'Content-Type': "multipart/form-data"
@@ -535,7 +543,7 @@ export const useStore = create<StoreState>()(
       },
       updateProduct: async (productId, update) => {
         try {
-          const data = await apiFetch(`/products/${productId}`, {
+          const data = await apiRequest(`/products/${productId}`, {
             method: "PATCH",
             data: update,
           })
@@ -546,7 +554,7 @@ export const useStore = create<StoreState>()(
       },
       deleteProduct: async (productId) => {
         try {
-          await apiFetch(`/products/${productId}`, { method: "DELETE" })
+          await apiRequest(`/products/${productId}`, { method: "DELETE" })
         } catch (error) {
           throw error
         }
@@ -556,7 +564,7 @@ export const useStore = create<StoreState>()(
       getUsers: async (params) => {
         try {
           const query = params ? "?" + new URLSearchParams(params).toString() : ""
-          const data = await apiFetch(`/users${query}`)
+          const data = await apiRequest(`/users${query}`)
           return data
         } catch (error) {
           throw error
@@ -564,7 +572,7 @@ export const useStore = create<StoreState>()(
       },
       getUser: async (userId) => {
         try {
-          const data = await apiFetch(`/users/${userId}`)
+          const data = await apiRequest(`/users/${userId}`)
           return data
         } catch (error) {
           throw error
@@ -572,7 +580,7 @@ export const useStore = create<StoreState>()(
       },
       deleteUser: async (userId) => {
         try {
-          await apiFetch(`/users/${userId}`, { method: "DELETE" })
+          await apiRequest(`/users/${userId}`, { method: "DELETE" })
         } catch (error) {
           throw error
         }

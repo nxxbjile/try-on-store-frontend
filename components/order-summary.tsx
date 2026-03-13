@@ -6,12 +6,9 @@ import { formatPrice } from "@/lib/utils"
 import { useStore } from "@/lib/store"
 
 export default function OrderSummary() {
-  const { cartItems, calculateSubtotal, calculateTotal } = useStore()
+  const { cartItems, calculatePricingBreakdown } = useStore()
 
-  const subtotal = calculateSubtotal()
-  const shipping = subtotal > 100 ? 0 : 10
-  const tax = subtotal * 0.08 // 8% tax
-  const total = calculateTotal()
+  const { subtotal, shipping, tax, total } = calculatePricingBreakdown()
 
   return (
     <Card>

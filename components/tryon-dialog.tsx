@@ -4,6 +4,7 @@ import type React from "react"
 
 import { useState } from "react"
 import Image from "next/image"
+import { useAuth, useUser } from "@clerk/nextjs"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -19,6 +20,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useRouter } from "next/navigation"
 import { getProduct } from "@/lib/api/products"
+import { fetchBackendUserProfile } from "@/lib/api/user-sync"
 import { useStore } from "@/lib/store"
 
 type TryonDialogProps = {
@@ -33,19 +35,32 @@ export default function TryonDialog({ isOpen, onClose, productId, productName }:
   const [isLoginDialogOpen, setIsLoginDialogOpen] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | undefined>(undefined)
-  const { user, updateUserProfile, updateUserImage, generateTryon, getTryonForProduct, isTryonLoading, addToCart } = useStore()
+  const { generateTryon, getTryonForProduct, isTryonLoading, addToCart, updateUserImage } = useStore()
+  const { isLoaded, isSignedIn, getToken } = useAuth()
+  const { user } = useUser()
   const { toast } = useToast()
   const router = useRouter()
 
   const existingTryon = getTryonForProduct(productId)
 
   const handleGenerateTryon = async () => {
-    if (!user) {
+    if (!isLoaded) {
+      return
+    }
+
+    if (!isSignedIn) {
       setIsLoginDialogOpen(true)
       return
     }
 
-    if (!user.image) {
+    const token = await getToken()
+    if (!token) {
+      setIsLoginDialogOpen(true)
+      return
+    }
+
+    const backendProfile = await fetchBackendUserProfile(token)
+    if (!backendProfile.image) {
       setIsImageDialogOpen(true)
       return
     }
@@ -80,13 +95,12 @@ export default function TryonDialog({ isOpen, onClose, productId, productName }:
   }
 
   const handleImageUpload = async () => {
-    if (!selectedFile || !user) return
+    if (!selectedFile) return
 
     try {
-      // Update user profile with new image URL
-      const formData = new FormData();
-      formData.append("file", selectedFile);
-      updateUserImage(formData);
+      const formData = new FormData()
+      formData.append("file", selectedFile)
+      await updateUserImage(formData)
 
       toast({
         title: "Image uploaded",
@@ -111,7 +125,7 @@ export default function TryonDialog({ isOpen, onClose, productId, productName }:
   const handleAddToCart = async () => {
     try {
       const product = await getProduct(productId)
-      if (!product) return
+      if (!product || !product._id) return
 
       // Default to first available size and color
       const defaultSize = product.sizes[0] || ""
@@ -179,7 +193,7 @@ export default function TryonDialog({ isOpen, onClose, productId, productName }:
                 <Button onClick={handleGenerateTryon} disabled={isTryonLoading}>
                   Generate Try-On
                 </Button>
-                {!user && <p className="text-sm text-muted-foreground">Please login to use the try-on feature.</p>}
+                {!isSignedIn && <p className="text-sm text-muted-foreground">Please login to use the try-on feature.</p>}
               </div>
             )}
           </div>
