@@ -28,7 +28,7 @@ export type Order = {
     _id: string
     name: string
     email: string
-  }
+  } | null
   products: OrderProduct[]
   shippingAddress: string
   status: OrderStatus
@@ -137,7 +137,7 @@ export default function OrdersList() {
             {orders.map((order) => (
               <TableRow key={order._id}>
                 <TableCell className="font-medium">{order._id.substring(0, 8)}...</TableCell>
-                <TableCell>{order.user.name}</TableCell>
+                <TableCell>{order.user?.name || "Unknown User"}</TableCell>
                 <TableCell>{new Date(order.createdAt).toLocaleDateString()}</TableCell>
                 <TableCell>
                   <Badge variant="outline" className={getStatusColor(order.status) + " text-white"}>

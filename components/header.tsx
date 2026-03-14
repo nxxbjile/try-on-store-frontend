@@ -6,9 +6,9 @@ import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useAuth, useClerk, useUser } from "@clerk/nextjs"
-import { setAuthTokenGetter, setInMemoryAuthToken } from "@/lib/api/client"
+import { apiRequest, setAuthTokenGetter, setInMemoryAuthToken } from "@/lib/api/client"
 import { syncBackendUserProfile } from "@/lib/api/user-sync"
-import { Search, User, ShoppingCart, Sun, Moon } from "lucide-react"
+import { Search, User, ShoppingCart, Sun, Moon, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -26,10 +26,7 @@ export default function Header() {
   const { isLoaded, isSignedIn, getToken } = useAuth()
   const { signOut } = useClerk()
   const { user } = useUser()
-  const role =
-    (typeof user?.publicMetadata?.role === "string" && user.publicMetadata.role) ||
-    (typeof user?.unsafeMetadata?.role === "string" && user.unsafeMetadata.role) ||
-    null
+  const role = useStore((state) => state.user?.role)
 
   // Fix hydration mismatch for theme icon
   const [mounted, setMounted] = useState(false)
@@ -62,6 +59,13 @@ export default function Header() {
         }
 
         try {
+          const currentUser = await apiRequest("/users/me", { method: "GET" })
+          useStore.setState({ user: currentUser })
+        } catch {
+          // If profile fetch fails, keep existing user state.
+        }
+
+        try {
           await getCartItems()
         } catch {
           // Cart prefetch should not break header rendering.
@@ -81,7 +85,7 @@ export default function Header() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     if (searchQuery.trim()) {
-      router.push(`/search?q=${encodeURIComponent(searchQuery)}`)
+      router.push(`/search?name=${encodeURIComponent(searchQuery.trim())}&sort=createdAt&order=desc&page=1&limit=20`)
       setShowMobileSearch(false)
     }
   }
@@ -94,55 +98,84 @@ export default function Header() {
   }
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
-      <div className="container flex h-16 items-center justify-between px-4">
+    <header className="sticky top-0 z-50 w-full flex items-center justify-center border-b border-border/70 bg-background/90 shadow-sm backdrop-blur supports-backdrop-filter:bg-background/70">
+      <div className="container flex h-18 w-full items-center justify-between gap-2 px-3 sm:gap-3 sm:px-4 md:gap-4 md:px-6">
         {/* Mobile search: when visible, hide logo/sidebar and span input full width */}
         {showMobileSearch ? (
           <form onSubmit={handleSearch} className="flex w-full items-center gap-2 md:hidden">
-            <Input
-              ref={mobileInputRef}
-              type="search"
-              placeholder="Search products..."
-              className="flex-1"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onBlur={() => setShowMobileSearch(false)}
-            />
-            <Button type="submit" size="icon">
-              <Search className="h-5 w-5" />
-              <span className="sr-only">Search</span>
+            <div className="relative flex-1">
+              <Input
+                ref={mobileInputRef}
+                type="text"
+                placeholder="Search products..."
+                className="h-9 w-full rounded-xl border-border/70 bg-[hsl(var(--surface-2))]/70 pr-9"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onBlur={() => setShowMobileSearch(false)}
+              />
+              {searchQuery ? (
+                <button
+                  type="button"
+                  aria-label="Clear search"
+                  className="absolute inset-y-0 right-2 flex items-center text-muted-foreground hover:text-foreground"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => setSearchQuery("")}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              ) : null}
+            </div>
+            <Button type="submit" className="h-9 rounded-xl px-3" size="sm">
+              <Search className="h-4 w-4" />
+              Search
             </Button>
           </form>
         ) : (
           <>
-            <div className="flex items-center gap-2 md:gap-4">
+            <div className="flex min-w-0 items-center gap-1.5 sm:gap-2 md:gap-3">
               <SidebarToggle />
-              <Link href="/" className="flex items-center gap-2">
-                <span className="font-bold lg:text-xl md:text-sm">Try-On Store</span>
+              <Link href="/" className="flex min-w-0 items-center gap-2">
+                <span className="max-w-38 truncate text-lg font-bold tracking-tight sm:max-w-none md:text-xl">Try-On Store</span>
               </Link>
             </div>
 
-            <form onSubmit={handleSearch} className="hidden md:flex w-full max-w-sm items-center space-x-2 mx-4">
-              <Input
-                type="search"
-                placeholder="Search products..."
-                className="flex-1"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              <Button type="submit" size="icon">
+            <form
+              onSubmit={handleSearch}
+              className="mx-2 hidden min-w-0 flex-1 items-center gap-2 md:flex md:max-w-lg"
+            >
+              <div className="relative flex-1">
+                <Input
+                  type="text"
+                  placeholder="Search products..."
+                  className="h-9 w-full rounded-xl border-border/70 bg-[hsl(var(--surface-2))]/70 px-4 pr-9"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+                {searchQuery ? (
+                  <button
+                    type="button"
+                    aria-label="Clear search"
+                    className="absolute inset-y-0 right-2 flex items-center text-muted-foreground hover:text-foreground"
+                    onClick={() => setSearchQuery("")}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                ) : null}
+              </div>
+              <Button type="submit" className="h-9 rounded-xl px-3 lg:px-4" size="sm">
                 <Search className="h-4 w-4" />
-                <span className="sr-only">Search</span>
+                <span>Search</span>
               </Button>
             </form>
 
-            <div className="flex items-center gap-2">
+            <div className="flex shrink-0 items-center gap-1 md:gap-2">
               {/* Mobile search icon */}
               <div className="relative md:hidden">
                 <Button
                   variant="ghost"
                   size="icon"
                   type="button"
+                  className="rounded-xl"
                   onClick={() => setShowMobileSearch(true)}
                 >
                   <Search className="h-5 w-5" />
@@ -151,7 +184,7 @@ export default function Header() {
               </div>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon">
+                  <Button variant="ghost" size="icon" className="rounded-xl">
                     <User className="h-5 w-5" />
                     <span className="sr-only">User menu</span>
                   </Button>
@@ -185,23 +218,25 @@ export default function Header() {
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon">
-                    {mounted ? (
-                      theme === "dark" ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />
-                    ) : null}
-                    <span className="sr-only">Toggle theme</span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => setTheme("light")}>Light</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setTheme("dark")}>Dark</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setTheme("system")}>System</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <div className="hidden sm:block">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="rounded-xl">
+                      {mounted ? (
+                        theme === "dark" ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />
+                      ) : null}
+                      <span className="sr-only">Toggle theme</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setTheme("light")}>Light</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setTheme("dark")}>Dark</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setTheme("system")}>System</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
 
-              <Button variant="ghost" size="icon" asChild className="relative">
+              <Button variant="ghost" size="icon" asChild className="relative rounded-xl">
                 <Link href="/cart">
                   <ShoppingCart className="h-5 w-5" />
                   {cartItems.length > 0 && (

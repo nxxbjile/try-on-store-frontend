@@ -16,6 +16,14 @@ const TAX_RATE = 0.18
 const SHIPPING_FEE = 0
 
 const roundCurrency = (value: number) => Math.round(value * 100) / 100
+const normalizeId = (value: unknown): string => {
+  if (typeof value === "string") return value
+  if (value && typeof value === "object" && "_id" in value) {
+    const maybeId = (value as { _id?: unknown })._id
+    return typeof maybeId === "string" ? maybeId : ""
+  }
+  return ""
+}
 
 type PricingBreakdown = {
   subtotal: number
@@ -161,6 +169,8 @@ type StoreState = {
   getProduct: (productId: string) => Promise<any>
   createProduct: (product: any) => Promise<any>
   updateProduct: (productId: string, update: any) => Promise<any>
+  uploadProductMainImage: (productId: string, file: File) => Promise<string>
+  uploadProductGalleryImage: (productId: string, file: File) => Promise<string>
   deleteProduct: (productId: string) => Promise<void>
 
   // User CRUD
@@ -177,6 +187,10 @@ type StoreState = {
   // Theme state
   theme: "light" | "dark" | "system"
   setTheme: (theme: "light" | "dark" | "system") => void
+  themePreset: "minimal" | "soft-contrast"
+  setThemePreset: (preset: "minimal" | "soft-contrast") => void
+  uiDensity: "comfortable" | "compact"
+  setUiDensity: (density: "comfortable" | "compact") => void
 }
 
 // Create store with persistence
@@ -428,21 +442,23 @@ export const useStore = create<StoreState>()(
             method: "POST",
             data: { product: productId },
           })
-          // the product tryon already exists update the image
-          if (get().tryonImages.find(item => item.product == productId)) {
-            const newTryonImages = get().tryonImages.map(item => {
-              if (item.product === productId) {
-                return {
-                  ...item,
-                  image: data.image
-                }
-              }
-              return item;
-            })
-            set({ tryonImages: newTryonImages });
-          }
 
-          set((state) => ({ tryonImages: [...state.tryonImages, data] }))
+          // Upsert latest try-on for this product instead of duplicating stale entries.
+          const targetProductId = normalizeId(productId)
+          set((state) => {
+            const index = state.tryonImages.findIndex(
+              (item) => normalizeId(item.product) === targetProductId,
+            )
+
+            if (index >= 0) {
+              const next = [...state.tryonImages]
+              next[index] = { ...next[index], ...data }
+              return { tryonImages: next }
+            }
+
+            return { tryonImages: [...state.tryonImages, data] }
+          })
+
           console.log("generateTryon Res ", data);
           return data
         } catch (error) {
@@ -453,7 +469,17 @@ export const useStore = create<StoreState>()(
         }
       },
       getTryonForProduct: (productId) => {
-        return get().tryonImages.find((tryon) => tryon.product === productId) || null
+        const targetProductId = normalizeId(productId)
+        const tryons = get().tryonImages
+
+        // Search from the end so the latest generated record wins.
+        for (let i = tryons.length - 1; i >= 0; i -= 1) {
+          if (normalizeId(tryons[i].product) === targetProductId) {
+            return tryons[i]
+          }
+        }
+
+        return null
       },
 
       // Orders CRUD
@@ -552,6 +578,42 @@ export const useStore = create<StoreState>()(
           throw error
         }
       },
+      uploadProductMainImage: async (productId, file) => {
+        try {
+          const formData = new FormData()
+          formData.append("file", file)
+
+          const data = await apiRequest<{ url: string }>(`/products/${productId}/upload-main-image`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "multipart/form-data",
+            },
+            data: formData,
+          })
+
+          return data.url
+        } catch (error) {
+          throw error
+        }
+      },
+      uploadProductGalleryImage: async (productId, file) => {
+        try {
+          const formData = new FormData()
+          formData.append("file", file)
+
+          const data = await apiRequest<{ url: string }>(`/products/${productId}/upload-gallery-image`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "multipart/form-data",
+            },
+            data: formData,
+          })
+
+          return data.url
+        } catch (error) {
+          throw error
+        }
+      },
       deleteProduct: async (productId) => {
         try {
           await apiRequest(`/products/${productId}`, { method: "DELETE" })
@@ -595,6 +657,10 @@ export const useStore = create<StoreState>()(
       // Theme state
       theme: "system",
       setTheme: (theme) => set({ theme }),
+      themePreset: "minimal",
+      setThemePreset: (themePreset) => set({ themePreset }),
+      uiDensity: "comfortable",
+      setUiDensity: (uiDensity) => set({ uiDensity }),
     }),
     {
       name: "tryon-store",
@@ -608,6 +674,8 @@ export const useStore = create<StoreState>()(
         cartItems: state.cartItems,
         tryonImages: state.tryonImages,
         theme: state.theme,
+        themePreset: state.themePreset,
+        uiDensity: state.uiDensity,
       }),
     },
   ),

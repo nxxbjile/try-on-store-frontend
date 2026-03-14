@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { X } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -17,7 +17,11 @@ type Category = {
 export default function Sidebar() {
   const [categories, setCategories] = useState<Category[]>([])
   const pathname = usePathname()
-  const { isSidebarOpen, closeSidebar } = useStore()
+  const searchParams = useSearchParams()
+  const { isSidebarOpen, closeSidebar, openSidebar } = useStore()
+
+  const categoryFilter = searchParams.get("category")
+  const isSearchPage = pathname === "/search"
 
   useEffect(() => {
     const fetchCategories = async () => {
@@ -42,50 +46,67 @@ export default function Sidebar() {
     const handleResize = () => {
       if (window.innerWidth < 768) {
         closeSidebar()
+      } else {
+        openSidebar()
       }
     }
 
+    handleResize()
     window.addEventListener("resize", handleResize)
     return () => window.removeEventListener("resize", handleResize)
-  }, [closeSidebar])
+  }, [closeSidebar, openSidebar])
+
+  const handleNavClick = () => {
+    if (window.innerWidth < 768) {
+      closeSidebar()
+    }
+  }
 
   return (
     <div
       className={cn(
-        "bg-card rounded-lg p-4 transition-all duration-300 ease-in-out",
-        "fixed md:sticky top-16 h-[calc(100vh-4rem)] z-40 w-64",
-        "md:translate-x-0",
-        isSidebarOpen ? "translate-x-0" : "-translate-x-full",
+        "z-40 overflow-hidden rounded-2xl border border-border/70 bg-card/95 shadow-md backdrop-blur transition-all duration-300 ease-out md:sticky md:self-start md:backdrop-blur-0",
+        "fixed left-3 right-3 top-20 w-auto max-w-72 md:left-auto md:right-auto md:top-24 md:w-72",
+        isSidebarOpen
+          ? "translate-x-0 opacity-100 md:w-64 md:min-w-64 md:mr-6 lg:mr-8"
+          : "-translate-x-[115%] opacity-0 pointer-events-none md:translate-x-0 md:opacity-100 md:w-0 md:min-w-0 md:mr-0 md:border-transparent md:bg-transparent md:p-0 md:shadow-none",
       )}
     >
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="font-semibold text-lg">Categories</h2>
+      <div className="mb-4 flex items-center justify-between border-b border-border/60 px-4 py-4 md:mb-5">
+        <h2 className="text-lg font-semibold">Categories</h2>
         <Button variant="ghost" size="sm" className="md:hidden" onClick={closeSidebar}>
           <X className="h-4 w-4" />
         </Button>
       </div>
-      <nav className="space-y-1">
+
+      <nav className="space-y-1.5 px-3 pb-4">
         <Link
-          href="/products"
+          href="/search?sort=createdAt&order=desc&page=1&limit=20"
           className={cn(
-            "block px-3 py-2 rounded-md hover:bg-accent transition-colors",
-            pathname === "/products" && "bg-accent font-medium",
+            "group relative block overflow-hidden rounded-lg px-3 py-2.5 transition-all duration-300",
+            "before:absolute before:inset-0 before:bg-linear-to-r before:from-[hsl(var(--accent-strong))]/25 before:to-transparent before:opacity-0 before:-translate-x-4 before:transition-all before:duration-300 before:ease-out",
+            "hover:before:translate-x-0 hover:before:opacity-100",
+            ((isSearchPage && !categoryFilter) || pathname === "/") &&
+              "bg-accent/80 font-medium after:absolute after:bottom-1.5 after:left-0 after:top-1.5 after:w-1 after:rounded-r-full after:bg-[hsl(var(--accent-strong))]",
           )}
-          onClick={() => closeSidebar()}
+          onClick={handleNavClick}
         >
-          All Products
+          <span className="relative z-10">All Products</span>
         </Link>
         {categories.map((category) => (
           <Link
             key={category._id}
-            href={`/categories/${category.slug}`}
+            href={`/search?category=${category.slug}&sort=createdAt&order=desc&page=1&limit=20`}
             className={cn(
-              "block px-3 py-2 rounded-md hover:bg-accent transition-colors",
-              pathname === `/categories/${category.slug}` && "bg-accent font-medium",
+              "group relative block overflow-hidden rounded-lg px-3 py-2.5 transition-all duration-300",
+              "before:absolute before:inset-0 before:bg-linear-to-r before:from-[hsl(var(--accent-strong))]/25 before:to-transparent before:opacity-0 before:-translate-x-4 before:transition-all before:duration-300 before:ease-out",
+              "hover:before:translate-x-0 hover:before:opacity-100",
+              isSearchPage && categoryFilter === category.slug &&
+                "bg-accent/80 font-medium after:absolute after:bottom-1.5 after:left-0 after:top-1.5 after:w-1 after:rounded-r-full after:bg-[hsl(var(--accent-strong))]",
             )}
-            onClick={() => closeSidebar()}
+            onClick={handleNavClick}
           >
-            {category.name}
+            <span className="relative z-10">{category.name}</span>
           </Link>
         ))}
       </nav>

@@ -3,12 +3,13 @@ import { notFound } from "next/navigation"
 import Header from "@/components/header"
 import ProductDetails from "@/components/product-details"
 import { Skeleton } from "@/components/ui/skeleton"
-import { getProduct } from "@/lib/api/products"
+import { getProduct, type ProductWithDetails } from "@/lib/api/products"
 import Sidebar from "@/components/sidebar"
 import NoticeBar from "@/components/notice-bar"
+import RecommendedProducts from "@/components/recommended-products"
 
 export default async function ProductPage( {params}: any) {
-  let product
+  let product: ProductWithDetails | null = null
   const { id } = await params;
   try {
     product = await getProduct(id)
@@ -31,6 +32,7 @@ export default async function ProductPage( {params}: any) {
             <Suspense fallback={<ProductDetailsSkeleton />}>
               <ProductDetails product={product} />
             </Suspense>
+            <RecommendedProducts currentProductId={product._id} />
           </div>
         </div>
       </div>

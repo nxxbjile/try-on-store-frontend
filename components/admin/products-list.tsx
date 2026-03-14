@@ -12,11 +12,22 @@ import { PlusCircle } from "lucide-react"
 import { useStore } from "@/lib/store"
 import { Product } from "@/lib/api/products"
 import EditProductDialog from "./edit-product-dialog"
+import type { AddProductPayload } from "@/components/admin/add-product-dialog"
+import type { EditProductPayload } from "@/components/admin/edit-product-dialog"
 
 const PAGE_SIZE = 20;
 export default function ProductsList() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
-  const {hasHydrated, getProducts, products, createProduct, deleteProduct:delProductStore } = useStore();
+  const {
+    hasHydrated,
+    getProducts,
+    products,
+    createProduct,
+    updateProduct,
+    uploadProductMainImage,
+    uploadProductGalleryImage,
+    deleteProduct: delProductStore,
+  } = useStore();
   const [isLoading, setIsLoading] = useState(false);
   const [hasMore, setHasMore] = useState<boolean>(false);
   const [page, setPage] = useState<number>(1);
@@ -47,13 +58,33 @@ const handleEditClick = (product: Product) => {
   setIsEditDialogOpen(true);
 };
 
-const handleEditProduct = async (updatedProduct: Product) => {
-  // Call your updateProduct API/store here
-  // await updateProduct(updatedProduct._id, updatedProduct);
-  setIsEditDialogOpen(false);
-  setEditProduct(null);
-  // Optionally refetch products
-  getProducts({page, limit:PAGE_SIZE});
+const handleEditProduct = async (payload: EditProductPayload) => {
+  await updateProduct(payload.productId, payload.update)
+
+  let resolvedMainImage = payload.existingMainImage
+  if (payload.mainImageFile) {
+    resolvedMainImage = await uploadProductMainImage(payload.productId, payload.mainImageFile)
+  }
+
+  const uploadedGalleryUrls: string[] = []
+  for (const file of payload.newGalleryImageFiles) {
+    const url = await uploadProductGalleryImage(payload.productId, file)
+    uploadedGalleryUrls.push(url)
+  }
+
+  const finalImages = [
+    ...(resolvedMainImage ? [resolvedMainImage] : []),
+    ...payload.keepGalleryImages,
+    ...uploadedGalleryUrls,
+  ]
+
+  if (finalImages.length > 0) {
+    await updateProduct(payload.productId, { images: finalImages })
+  }
+
+  setIsEditDialogOpen(false)
+  setEditProduct(null)
+  await getProducts({ page, limit: PAGE_SIZE })
 };
 
 const handleDeleteClick = (product: Product) => {
@@ -73,18 +104,34 @@ const handleDeleteProduct = async () => {
   }
 };
 
-const handleAddProduct = (formData: Product) => {
-  // todo : handle create product
-  try{
-    const res = createProduct(formData);  
-    if(res){
-      console.log("handleAddProduct Res:", res);
-    }
-  }catch(err){
-    console.error("Unable to create Product: ", err);
+const handleAddProduct = async (payload: AddProductPayload) => {
+  const createRes = await createProduct(payload.product)
+  const createdProduct = createRes?.product ?? createRes
+  const productId = String(createdProduct?._id || "")
+
+  if (!productId) {
+    throw new Error("Product created but product id was missing")
   }
-  
-}
+
+  let mainImageUrl: string | null = null
+  if (payload.mainImageFile) {
+    mainImageUrl = await uploadProductMainImage(productId, payload.mainImageFile)
+  }
+
+  const galleryUrls: string[] = []
+  for (const file of payload.galleryImageFiles) {
+    const url = await uploadProductGalleryImage(productId, file)
+    galleryUrls.push(url)
+  }
+
+  const finalImages = [...(mainImageUrl ? [mainImageUrl] : []), ...galleryUrls]
+  if (finalImages.length > 0) {
+    await updateProduct(productId, { images: finalImages })
+  }
+
+  await getProducts({ page: 1, limit: PAGE_SIZE })
+  setPage(1)
+};
 const loadMore = async () => {
   setIsLoading(true)
   try {

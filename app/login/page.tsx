@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { useAuth } from "@clerk/nextjs"
 import { useSignIn } from "@clerk/nextjs/legacy"
@@ -15,6 +15,68 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
+
+function getServerErrorMessage(error: unknown, fallback: string) {
+  if (isClerkAPIResponseError(error)) {
+    const clerkMessages = (error.errors || [])
+      .map((entry) => entry.longMessage || entry.message)
+      .filter((message): message is string => Boolean(message))
+
+    if (clerkMessages.length > 0) {
+      return clerkMessages.join(" ")
+    }
+
+    return fallback
+  }
+
+  if (typeof error === "object" && error !== null) {
+    const candidate = error as {
+      response?: { data?: any }
+      message?: string
+    }
+
+    const responseData = candidate.response?.data
+
+    if (typeof responseData?.message === "string" && responseData.message.trim()) {
+      return responseData.message
+    }
+
+    if (Array.isArray(responseData?.errors)) {
+      const messages = responseData.errors
+        .map((entry: any) => {
+          if (typeof entry === "string") return entry
+          if (typeof entry?.message === "string") return entry.message
+          return ""
+        })
+        .filter((message: string) => Boolean(message))
+
+      if (messages.length > 0) {
+        return messages.join(" ")
+      }
+    }
+
+    if (responseData?.errors && typeof responseData.errors === "object") {
+      const messages = Object.values(responseData.errors)
+        .flatMap((entry: any) => (Array.isArray(entry) ? entry : [entry]))
+        .map((entry: any) => {
+          if (typeof entry === "string") return entry
+          if (typeof entry?.message === "string") return entry.message
+          return ""
+        })
+        .filter((message: string) => Boolean(message))
+
+      if (messages.length > 0) {
+        return messages.join(" ")
+      }
+    }
+
+    if (typeof candidate.message === "string" && candidate.message.trim()) {
+      return candidate.message
+    }
+  }
+
+  return fallback
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -28,7 +90,6 @@ export default function LoginPage() {
   const { isLoaded: authLoaded, isSignedIn, getToken } = useAuth()
   const { toast } = useToast()
   const router = useRouter()
-  const searchParams = useSearchParams()
   const redirectPath = "/"
 
   useEffect(() => {
@@ -128,11 +189,7 @@ export default function LoginPage() {
         })
       }
     } catch (error) {
-      const description = isClerkAPIResponseError(error)
-        ? error.errors?.[0]?.longMessage || error.errors?.[0]?.message || "Please check your credentials and try again."
-        : error instanceof Error
-          ? error.message
-          : "Please check your credentials and try again."
+      const description = getServerErrorMessage(error, "Please check your credentials and try again.")
 
       toast({
         title: "Login failed",
@@ -155,11 +212,7 @@ export default function LoginPage() {
         redirectUrlComplete: "/",
       })
     } catch (error) {
-      const description = isClerkAPIResponseError(error)
-        ? error.errors?.[0]?.longMessage || error.errors?.[0]?.message || "Google sign-in failed. Please try again."
-        : error instanceof Error
-          ? error.message
-          : "Google sign-in failed. Please try again."
+      const description = getServerErrorMessage(error, "Google sign-in failed. Please try again.")
 
       toast({
         title: "Google sign-in failed",

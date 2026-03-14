@@ -1,8 +1,6 @@
 import { clerkMiddleware } from "@clerk/nextjs/server"
 import { NextResponse } from "next/server"
 
-type Claims = Record<string, unknown> | null | undefined
-
 const isAdminRoute = (pathname: string) => pathname.startsWith("/admin")
 
 const isProtectedRoute = (pathname: string) =>
@@ -12,21 +10,8 @@ const isProtectedRoute = (pathname: string) =>
   pathname.startsWith("/cart") ||
   isAdminRoute(pathname)
 
-function getRoleFromClaims(claims: Claims): string | null {
-  const directRole = claims?.role
-  if (typeof directRole === "string") return directRole
-
-  const metadataRole = (claims?.metadata as Record<string, unknown> | undefined)?.role
-  if (typeof metadataRole === "string") return metadataRole
-
-  const publicMetadataRole = (claims?.publicMetadata as Record<string, unknown> | undefined)?.role
-  if (typeof publicMetadataRole === "string") return publicMetadataRole
-
-  const snakeCaseMetadataRole = (claims?.public_metadata as Record<string, unknown> | undefined)?.role
-  if (typeof snakeCaseMetadataRole === "string") return snakeCaseMetadataRole
-
-  return null
-}
+const API_BASE_URL =
+  process.env.API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3001/api/v1"
 
 export default clerkMiddleware(async (auth, req) => {
   const pathname = req.nextUrl.pathname
@@ -35,7 +20,7 @@ export default clerkMiddleware(async (auth, req) => {
     return NextResponse.next()
   }
 
-  const { userId, sessionClaims } = await auth()
+  const { userId, getToken } = await auth()
 
   if (!userId) {
     const loginUrl = new URL("/login", req.url)
@@ -44,9 +29,31 @@ export default clerkMiddleware(async (auth, req) => {
   }
 
   if (isAdminRoute(pathname)) {
-    const role = getRoleFromClaims(sessionClaims as Claims)
+    const token = await getToken()
 
-    if (role !== "admin") {
+    if (!token) {
+      return NextResponse.redirect(new URL("/", req.url))
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/users/me`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) {
+        return NextResponse.redirect(new URL("/", req.url))
+      }
+
+      const backendUser = await response.json()
+      const role = backendUser?.role
+
+      if (role !== "admin") {
+        return NextResponse.redirect(new URL("/", req.url))
+      }
+    } catch {
       return NextResponse.redirect(new URL("/", req.url))
     }
   }

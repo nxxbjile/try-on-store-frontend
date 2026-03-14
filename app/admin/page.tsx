@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { useAuth, useUser } from "@clerk/nextjs"
+import { useAuth } from "@clerk/nextjs"
+import { ArrowUpRight, BarChart3, DollarSign, PackageCheck, Sparkles, Users } from "lucide-react"
 import Header from "@/components/header"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -14,12 +15,13 @@ import CustomersList from "@/components/admin/customers-list"
 import CategoriesList from "@/components/admin/categories-list"
 import AnalyticsDashboard from "@/components/admin/analytics-dashboard"
 import SettingsPanel from "@/components/admin/settings-panel"
+import { useStore } from "@/lib/store"
 
 export default function AdminDashboard() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { isLoaded, isSignedIn } = useAuth()
-  const { user } = useUser()
+  const role = useStore((state) => state.user?.role)
 
   // Get tab from URL or default to "dashboard"
   const [activeTab, setActiveTab] = useState("dashboard")
@@ -28,11 +30,6 @@ export default function AdminDashboard() {
     const tabParam = searchParams.get("tab")
     setActiveTab(tabParam || "dashboard")
   },[searchParams])
-
-  const role =
-    (typeof user?.publicMetadata?.role === "string" && user.publicMetadata.role) ||
-    (typeof user?.unsafeMetadata?.role === "string" && user.unsafeMetadata.role) ||
-    null
 
   // Update URL when tab changes
   const handleTabChange = (value: string) => {
@@ -56,23 +53,34 @@ export default function AdminDashboard() {
   }
 
   return (
-    <main className="min-h-screen">
+    <main className="min-h-screen bg-[hsl(var(--surface-1))]">
       <NoticeBar />
       <Header />
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex relative">
+      <div className="container relative mx-auto px-4 py-8 md:px-6 md:py-10">
+        <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-56 bg-linear-to-b from-[hsl(var(--accent-soft))]/60 to-transparent" />
+        <div className="relative flex items-start gap-6 lg:gap-8">
           <AdminSidebar />
-          <div className="flex-1 w-full">
-            <Card className="mb-6">
-              <CardHeader>
-                <CardTitle>Admin Dashboard</CardTitle>
-                <CardDescription>Manage your store's products, orders, and customers</CardDescription>
+          <div className="flex-1 w-full space-y-8 md:space-y-10">
+            <Card className="overflow-hidden rounded-2xl border-border/70 bg-card shadow-md">
+              <div className="h-1.5 w-full bg-linear-to-r from-[hsl(var(--accent-strong))] to-[hsl(var(--primary))]" />
+              <CardHeader className="relative px-6 pb-7 pt-7 md:px-8 md:pb-8 md:pt-8">
+                <div className="absolute inset-0 bg-linear-to-r from-[hsl(var(--accent-soft))]/70 via-transparent to-transparent" />
+                <div className="relative flex flex-col gap-4">
+                  <div className="inline-flex w-fit items-center gap-2 rounded-full border border-border/70 bg-[hsl(var(--surface-2))] px-3 py-1 text-xs font-semibold text-muted-foreground">
+                    <Sparkles className="h-3.5 w-3.5 text-[hsl(var(--accent-strong))]" />
+                    Control Center
+                  </div>
+                  <CardTitle className="text-2xl tracking-tight md:text-3xl lg:text-4xl">Admin Dashboard</CardTitle>
+                  <CardDescription className="max-w-2xl text-sm leading-6 md:text-base md:leading-7">
+                    Monitor operations, review performance, and manage your catalog from one focused workspace.
+                  </CardDescription>
+                </div>
               </CardHeader>
             </Card>
 
             <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
               <div className="-mx-4 px-4 overflow-x-auto">
-                <TabsList className="mb-4 min-w-max">
+                <TabsList className="mb-6 min-w-max">
                   <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
                   <TabsTrigger value="orders">Orders</TabsTrigger>
                   <TabsTrigger value="products">Products</TabsTrigger>
@@ -84,50 +92,82 @@ export default function AdminDashboard() {
               </div>
 
               <TabsContent value="dashboard">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-base">Total Orders</CardTitle>
+                <div className="grid grid-cols-1 gap-5 md:mb-8 md:grid-cols-3 md:gap-6 mb-7">
+                  <Card className="rounded-2xl border-border/70 bg-card shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
+                    <CardHeader className="px-5 pb-2 pt-5">
+                      <div className="mb-3 flex items-center justify-between">
+                        <div className="rounded-xl border border-border/70 bg-[hsl(var(--accent-soft))] p-2 text-[hsl(var(--accent-strong))]">
+                          <PackageCheck className="h-4 w-4" />
+                        </div>
+                        <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-[hsl(var(--surface-2))] px-2 py-0.5 text-xs text-muted-foreground">
+                          <ArrowUpRight className="h-3 w-3" />
+                          Monthly
+                        </span>
+                      </div>
+                      <CardTitle className="text-sm font-semibold tracking-wide text-muted-foreground">Total Orders</CardTitle>
                     </CardHeader>
-                    <CardContent>
-                      <p className="text-3xl font-bold">128</p>
-                      <p className="text-sm text-muted-foreground">+12% from last month</p>
+                    <CardContent className="px-5 pb-5 pt-1">
+                      <p className="text-3xl font-semibold tracking-tight">128</p>
+                      <p className="mt-1.5 text-sm text-muted-foreground">+12% from last month</p>
                     </CardContent>
                   </Card>
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-base">Total Revenue</CardTitle>
+                  <Card className="rounded-2xl border-border/70 bg-card shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
+                    <CardHeader className="px-5 pb-2 pt-5">
+                      <div className="mb-3 flex items-center justify-between">
+                        <div className="rounded-xl border border-border/70 bg-[hsl(var(--accent-soft))] p-2 text-[hsl(var(--accent-strong))]">
+                          <DollarSign className="h-4 w-4" />
+                        </div>
+                        <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-[hsl(var(--surface-2))] px-2 py-0.5 text-xs text-muted-foreground">
+                          <ArrowUpRight className="h-3 w-3" />
+                          Monthly
+                        </span>
+                      </div>
+                      <CardTitle className="text-sm font-semibold tracking-wide text-muted-foreground">Total Revenue</CardTitle>
                     </CardHeader>
-                    <CardContent>
-                      <p className="text-3xl font-bold">$12,543</p>
-                      <p className="text-sm text-muted-foreground">+8% from last month</p>
+                    <CardContent className="px-5 pb-5 pt-1">
+                      <p className="text-3xl font-semibold tracking-tight">$12,543</p>
+                      <p className="mt-1.5 text-sm text-muted-foreground">+8% from last month</p>
                     </CardContent>
                   </Card>
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-base">Total Customers</CardTitle>
+                  <Card className="rounded-2xl border-border/70 bg-card shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg">
+                    <CardHeader className="px-5 pb-2 pt-5">
+                      <div className="mb-3 flex items-center justify-between">
+                        <div className="rounded-xl border border-border/70 bg-[hsl(var(--accent-soft))] p-2 text-[hsl(var(--accent-strong))]">
+                          <Users className="h-4 w-4" />
+                        </div>
+                        <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-[hsl(var(--surface-2))] px-2 py-0.5 text-xs text-muted-foreground">
+                          <ArrowUpRight className="h-3 w-3" />
+                          Monthly
+                        </span>
+                      </div>
+                      <CardTitle className="text-sm font-semibold tracking-wide text-muted-foreground">Total Customers</CardTitle>
                     </CardHeader>
-                    <CardContent>
-                      <p className="text-3xl font-bold">543</p>
-                      <p className="text-sm text-muted-foreground">+15% from last month</p>
+                    <CardContent className="px-5 pb-5 pt-1">
+                      <p className="text-3xl font-semibold tracking-tight">543</p>
+                      <p className="mt-1.5 text-sm text-muted-foreground">+15% from last month</p>
                     </CardContent>
                   </Card>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Recent Orders</CardTitle>
+                <div className="grid grid-cols-1 gap-7">
+                  <Card className="rounded-2xl border-border/70 bg-card shadow-md">
+                    <CardHeader className="border-b border-border/60 bg-[hsl(var(--surface-2))] px-6 py-5">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-lg">Recent Orders</CardTitle>
+                        <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                      <CardDescription>Latest customer purchases and status updates.</CardDescription>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="px-6 py-6">
                       <OrdersList />
                     </CardContent>
                   </Card>
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Top Products</CardTitle>
+                  <Card className="rounded-2xl border-border/70 bg-card shadow-md">
+                    <CardHeader className="border-b border-border/60 bg-[hsl(var(--surface-2))] px-6 py-5">
+                      <CardTitle className="text-lg">Top Products</CardTitle>
+                      <CardDescription>Most purchased items in the current period.</CardDescription>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="px-6 py-6">
                       <ProductsList />
                     </CardContent>
                   </Card>

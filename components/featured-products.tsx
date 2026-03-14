@@ -9,7 +9,7 @@ import { Eye } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { formatPrice } from "@/lib/utils"
 import { getProducts, type Product } from "@/lib/api/products"
-import TryonDialog from "@/components/tryon-dialog"
+import TryonDialog from "./tryon-dialog"
 import { useStore } from "@/lib/store"
 
 export default function FeaturedProducts() {
@@ -37,7 +37,7 @@ export default function FeaturedProducts() {
 
   return (
     <>
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-2 gap-4 sm:gap-5 md:grid-cols-3 lg:grid-cols-4 md:gap-6">
         {products.map((product) => (
           <Card key={product._id} className="overflow-hidden">
             <Link href={`/products/${product._id}`}>
@@ -82,7 +82,7 @@ export default function FeaturedProducts() {
         ))}
       </div>
 
-      {selectedProduct && (
+      {selectedProduct && selectedProduct._id && (
         <TryonDialog
           isOpen={isTryonOpen}
           onClose={() => setIsTryonOpen(false)}

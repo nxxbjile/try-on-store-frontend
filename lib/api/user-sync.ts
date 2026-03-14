@@ -12,6 +12,7 @@ export type BackendUserProfile = {
   _id?: string
   name?: string
   email?: string
+  role?: "user" | "admin"
   image?: string
   address?: string
   phone?: string
@@ -24,6 +25,7 @@ function normalizeUserPayload(data: any): BackendUserProfile {
     _id: typeof user?._id === "string" ? user._id : undefined,
     name: typeof user?.name === "string" ? user.name : undefined,
     email: typeof user?.email === "string" ? user.email : undefined,
+    role: user?.role === "admin" || user?.role === "user" ? user.role : undefined,
     image: typeof user?.image === "string" ? user.image : undefined,
     address: typeof user?.address === "string" ? user.address : undefined,
     phone: typeof user?.phone === "string" ? user.phone : undefined,

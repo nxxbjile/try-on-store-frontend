@@ -31,8 +31,8 @@ export default function OrderDetailsDialog({ order, isOpen, onClose, onStatusCha
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
               <h3 className="font-medium">Customer Information</h3>
-              <p className="text-sm">{order.user.name}</p>
-              <p className="text-sm">{order.user.email}</p>
+              <p className="text-sm">{order.user?.name || "Unknown User"}</p>
+              <p className="text-sm">{order.user?.email || "No email"}</p>
             </div>
             <div>
               <h3 className="font-medium">Shipping Address</h3>
@@ -49,7 +49,7 @@ export default function OrderDetailsDialog({ order, isOpen, onClose, onStatusCha
               <h3 className="font-medium">Status</h3>
               <div className="flex items-center gap-2">
                 <Select defaultValue={order.status} onValueChange={handleStatusChange}>
-                  <SelectTrigger className="w-[180px]">
+                  <SelectTrigger className="w-45">
                     <SelectValue placeholder="Status" />
                   </SelectTrigger>
                   <SelectContent>

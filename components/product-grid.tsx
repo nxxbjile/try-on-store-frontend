@@ -18,7 +18,7 @@ type ProductGridProps = {
 
 export default function ProductGrid({ products }: ProductGridProps) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+    <div className="grid grid-cols-2 gap-4 sm:gap-5 md:grid-cols-3 md:gap-6">
       {products.map((product) => (
         <ProductCard key={product._id} product={product} />
       ))}
@@ -80,12 +80,12 @@ function ProductCard({ product }: { product: Product }) {
             )}
           </div>
         </CardContent>
-        <CardFooter className="p-4 pt-0 flex gap-2">
-          <Button variant="outline" className="flex-1" onClick={() => setIsTryonOpen(true)}>
+        <CardFooter className="flex flex-col gap-2 p-3 pt-0 sm:flex-row sm:p-4 sm:pt-0">
+          <Button variant="outline" className="w-full sm:flex-1" onClick={() => setIsTryonOpen(true)}>
             <Eye className="h-4 w-4 mr-2" />
             Try On
           </Button>
-          <Button variant="secondary" className="flex-1" onClick={handleAddToCart}>
+          <Button variant="secondary" className="w-full sm:flex-1" onClick={handleAddToCart}>
             <ShoppingCart className="h-4 w-4 mr-2" />
             Add
           </Button>

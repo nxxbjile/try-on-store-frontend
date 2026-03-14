@@ -8,7 +8,7 @@ export default function SidebarToggle() {
   const { toggleSidebar } = useStore()
 
   return (
-    <Button variant="ghost" size="icon" onClick={toggleSidebar} className="mr-2">
+    <Button variant="ghost" size="icon" onClick={toggleSidebar} className="rounded-xl">
       <Menu className="h-5 w-5" />
       <span className="sr-only">Toggle sidebar</span>
     </Button>
