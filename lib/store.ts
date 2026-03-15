@@ -88,6 +88,7 @@ type Product = {
   _id: string
   name: string
   description: string
+  descriptionRich?: string
   category: "shirt" | "t-shirt" | "pants"
   price: number
   discount?: number

@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "ckeditor5/ckeditor5.css";
 
 @theme {
   /* In v4, adding these here automatically creates utility 
@@ -103,4 +104,115 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+.rich-text-editor-shell .ck.ck-editor {
+  --ck-color-base-background: hsl(var(--background));
+  --ck-color-base-border: hsl(var(--border));
+  --ck-color-toolbar-background: hsl(var(--surface-2));
+  --ck-color-text: hsl(var(--foreground));
+}
+
+.rich-text-editor-shell .ck.ck-editor__main > .ck-editor__editable {
+  min-height: 220px;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+.rich-text-editor-shell .ck.ck-toolbar {
+  border-top-left-radius: 0.5rem;
+  border-top-right-radius: 0.5rem;
+}
+
+.rich-text-editor-shell .ck.ck-editor__main > .ck-editor__editable {
+  border-bottom-left-radius: 0.5rem;
+  border-bottom-right-radius: 0.5rem;
+}
+
+.rich-text-content {
+  color: hsl(var(--foreground));
+  font-size: 0.95rem;
+  line-height: 1.65;
+}
+
+.rich-text-content h1,
+.rich-text-content h2,
+.rich-text-content h3,
+.rich-text-content h4 {
+  margin-top: 0.75rem;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+
+.rich-text-content p,
+.rich-text-content ul,
+.rich-text-content ol,
+.rich-text-content blockquote {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.rich-text-content blockquote {
+  border-left: 3px solid hsl(var(--border));
+  padding-left: 0.75rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.rich-text-content ul,
+.rich-text-content ol {
+  padding-left: 1.25rem;
+}
+
+.rich-text-content ul {
+  list-style: disc;
+}
+
+.rich-text-content ol {
+  list-style: decimal;
+}
+
+.rich-text-content a {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+}
+
+.rich-text-content strong,
+.rich-text-content b {
+  font-weight: 700;
+}
+
+.rich-text-content .text-left {
+  text-align: left;
+}
+
+.rich-text-content .text-center {
+  text-align: center;
+}
+
+.rich-text-content .text-right {
+  text-align: right;
+}
+
+.rich-text-content .text-justify {
+  text-align: justify;
+}
+
+.rich-text-content .ck-align-left,
+.rich-text-content .align-left {
+  text-align: left;
+}
+
+.rich-text-content .ck-align-center,
+.rich-text-content .align-center {
+  text-align: center;
+}
+
+.rich-text-content .ck-align-right,
+.rich-text-content .align-right {
+  text-align: right;
+}
+
+.rich-text-content .ck-align-justify,
+.rich-text-content .align-justify {
+  text-align: justify;
 }

@@ -3,9 +3,10 @@
 import axios from "axios";
 
 export type Product = {
-  _id?: string
+  _id: string
   name: string
   description: string
+  descriptionRich?: string
   category: "shirt" | "t-shirt" | "pants"
   price: number
   discount?: number
@@ -20,9 +21,7 @@ export type Product = {
   updatedAt?: string
 }
 
-export type ProductWithDetails = Product & {
-  details: string // Additional field for UI display
-}
+export type ProductWithDetails = Product
 
 export async function getProducts(options = {}): Promise<Product[]> {
   // In a real app, we would fetch from the API
@@ -108,25 +107,19 @@ export async function getProducts(options = {}): Promise<Product[]> {
 }
 
 export async function getProduct(id: string): Promise<ProductWithDetails | null> {
-  // In a real app, we would fetch from the API
-  // For example: return fetch(`/api/v1/products/${id}`).then(res => res.json())
-
-  const products = await getProducts()
-  const product = products.find((p) => p._id === id)
-
-  if (!product) return null
-
-  // Add additional details for the product page
-  return {
-    ...product,
-    details: `<p>Our ${product.name} is designed for comfort and style. Features include:</p>
-      <ul>
-        <li>${product.category === "shirt" ? "100% premium cotton" : "High-quality fabric"}</li>
-        <li>${product.category === "shirt" ? "Button-down collar" : product.category === "pants" ? "Comfortable waistband" : "Crew neck"}</li>
-        <li>Regular fit</li>
-        <li>Machine washable</li>
-      </ul>`,
+  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/^"|"$/g, "")
+  if (!baseUrl) {
+    throw new Error("NEXT_PUBLIC_BACKEND_BASE_URL is not defined in your environment variables.")
   }
+
+  const res = await axios.get(`${baseUrl}/products/${id}`)
+  const product = res.data?.product ?? res.data
+
+  if (!product) {
+    return null
+  }
+
+  return product as ProductWithDetails
 }
 
 export async function getCategories() {

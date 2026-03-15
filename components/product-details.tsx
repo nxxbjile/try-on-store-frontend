@@ -232,7 +232,6 @@ export default function ProductDetails({ product }: ProductProps) {
               </span>
             </div>
             <h1 className="text-3xl font-bold leading-tight lg:text-4xl">{product.name}</h1>
-            <p className="max-w-xl text-sm text-muted-foreground lg:text-base">{product.description}</p>
           </div>
 
           <div className="space-y-1 rounded-xl border border-border/70 bg-[hsl(var(--surface-2))]/45 p-4">
@@ -338,11 +337,12 @@ export default function ProductDetails({ product }: ProductProps) {
         <TabsContent value="details" className="mt-0">
           <Card className="rounded-2xl border-border/70">
             <CardContent className="space-y-4 p-5 sm:p-6">
-              <h3 className="text-lg font-semibold">About this item</h3>
-              <div
-                className="prose prose-sm max-w-none text-foreground/90 dark:prose-invert"
-                dangerouslySetInnerHTML={{ __html: product.details }}
-              />
+              <h3 className="text-lg font-semibold">About Product</h3>
+              {product.descriptionRich ? (
+                <div className="rich-text-content ck-content" dangerouslySetInnerHTML={{ __html: product.descriptionRich }} />
+              ) : (
+                <p className="text-sm text-muted-foreground">No product details yet</p>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

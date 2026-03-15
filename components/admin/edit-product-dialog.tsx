@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import RichTextEditor from "@/components/admin/rich-text-editor"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { UploadCloud, X } from "lucide-react"
@@ -24,6 +25,7 @@ export type EditProductPayload = {
   update: {
     name: string
     description: string
+    descriptionRich?: string
     category: "shirt" | "t-shirt" | "pants"
     price: number
     discount: number
@@ -50,6 +52,7 @@ export default function EditProductDialog({ isOpen, onClose, onEditProduct, init
   const [productDetails, setProductDetails] = useState({
     name: initialProduct.name || "",
     description: initialProduct.description || "",
+    descriptionRich: initialProduct.descriptionRich || "",
     category: (initialProduct.category || "shirt") as "shirt" | "t-shirt" | "pants",
     price: initialProduct.price || 0,
     discount: initialProduct.discount || 0,
@@ -91,6 +94,7 @@ export default function EditProductDialog({ isOpen, onClose, onEditProduct, init
     setProductDetails({
       name: initialProduct.name || "",
       description: initialProduct.description || "",
+      descriptionRich: initialProduct.descriptionRich || "",
       category: (initialProduct.category || "shirt") as "shirt" | "t-shirt" | "pants",
       price: initialProduct.price || 0,
       discount: initialProduct.discount || 0,
@@ -172,6 +176,8 @@ export default function EditProductDialog({ isOpen, onClose, onEditProduct, init
         update: {
           name: productDetails.name.trim(),
           description: productDetails.description.trim(),
+          descriptionRich:
+            productDetails.descriptionRich.trim() === "<p><br></p>" ? "" : productDetails.descriptionRich.trim(),
           category: productDetails.category,
           price: Number(productDetails.price),
           discount: Number(productDetails.discount) || 0,
@@ -249,6 +255,15 @@ export default function EditProductDialog({ isOpen, onClose, onEditProduct, init
                 rows={3}
                 value={productDetails.description}
                 onChange={(e) => setProductDetails((prev) => ({ ...prev, description: e.target.value }))}
+              />
+            </div>
+
+            <div className="space-y-2 rounded-xl border border-border/70 bg-[hsl(var(--surface-2))]/30 p-4">
+              <Label>About Product (Rich Text)</Label>
+              <RichTextEditor
+                value={productDetails.descriptionRich}
+                onChange={(value) => setProductDetails((prev) => ({ ...prev, descriptionRich: value }))}
+                placeholder="Write rich product details for the details page"
               />
             </div>
 
