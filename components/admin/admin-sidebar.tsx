@@ -69,7 +69,6 @@ export default function AdminSidebar() {
                 isActive &&
                   "bg-accent/80 font-medium after:absolute after:bottom-1.5 after:left-0 after:top-1.5 after:w-1 after:rounded-r-full after:bg-[hsl(var(--accent-strong))]",
               )}
-              onClick={() => closeSidebar()}
             >
               <item.icon className="relative z-10 h-5 w-5" />
               <span className="relative z-10">{item.name}</span>
