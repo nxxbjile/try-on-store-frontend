@@ -3,12 +3,12 @@ import { CheckCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 
-export default function OrderConfirmationPage({
+export default async function OrderConfirmationPage({
   searchParams,
 }: {
   searchParams?: Record<string, string | string[] | undefined>
 }) {
-  const rawOrderId = searchParams?.orderId
+  const rawOrderId = await searchParams?.orderId
   const orderNumber = typeof rawOrderId === "string" && rawOrderId.trim().length > 0 ? rawOrderId : "Pending"
   const orderDate = new Date().toLocaleDateString()
   const estimatedDelivery = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString()
