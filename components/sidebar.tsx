@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
@@ -17,11 +17,7 @@ type Category = {
 export default function Sidebar() {
   const [categories, setCategories] = useState<Category[]>([])
   const pathname = usePathname()
-  const searchParams = useSearchParams()
   const { isSidebarOpen, closeSidebar, openSidebar } = useStore()
-
-  const categoryFilter = searchParams.get("category")
-  const isSearchPage = pathname === "/search"
 
   useEffect(() => {
     const fetchCategories = async () => {
@@ -79,37 +75,95 @@ export default function Sidebar() {
         </Button>
       </div>
 
-      <nav className="space-y-1.5 px-3 pb-4">
+      <Suspense fallback={<SidebarNavFallback categories={categories} onNavClick={handleNavClick} />}>
+        <SidebarNav categories={categories} pathname={pathname} onNavClick={handleNavClick} />
+      </Suspense>
+    </div>
+  )
+}
+
+function SidebarNav({
+  categories,
+  pathname,
+  onNavClick,
+}: {
+  categories: Category[]
+  pathname: string
+  onNavClick: () => void
+}) {
+  const searchParams = useSearchParams()
+  const categoryFilter = searchParams.get("category")
+  const isSearchPage = pathname === "/search"
+
+  return (
+    <nav className="space-y-1.5 px-3 pb-4">
+      <Link
+        href="/search?sort=createdAt&order=desc&page=1&limit=20"
+        className={cn(
+          "group relative block overflow-hidden rounded-lg px-3 py-2.5 transition-all duration-300",
+          "before:absolute before:inset-0 before:bg-linear-to-r before:from-[hsl(var(--accent-strong))]/25 before:to-transparent before:opacity-0 before:-translate-x-4 before:transition-all before:duration-300 before:ease-out",
+          "hover:before:translate-x-0 hover:before:opacity-100",
+          ((isSearchPage && !categoryFilter) || pathname === "/") &&
+            "bg-accent/80 font-medium after:absolute after:bottom-1.5 after:left-0 after:top-1.5 after:w-1 after:rounded-r-full after:bg-[hsl(var(--accent-strong))]",
+        )}
+        onClick={onNavClick}
+      >
+        <span className="relative z-10">All Products</span>
+      </Link>
+      {categories.map((category) => (
         <Link
-          href="/search?sort=createdAt&order=desc&page=1&limit=20"
+          key={category._id}
+          href={`/search?category=${category.slug}&sort=createdAt&order=desc&page=1&limit=20`}
           className={cn(
             "group relative block overflow-hidden rounded-lg px-3 py-2.5 transition-all duration-300",
             "before:absolute before:inset-0 before:bg-linear-to-r before:from-[hsl(var(--accent-strong))]/25 before:to-transparent before:opacity-0 before:-translate-x-4 before:transition-all before:duration-300 before:ease-out",
             "hover:before:translate-x-0 hover:before:opacity-100",
-            ((isSearchPage && !categoryFilter) || pathname === "/") &&
+            isSearchPage && categoryFilter === category.slug &&
               "bg-accent/80 font-medium after:absolute after:bottom-1.5 after:left-0 after:top-1.5 after:w-1 after:rounded-r-full after:bg-[hsl(var(--accent-strong))]",
           )}
-          onClick={handleNavClick}
+          onClick={onNavClick}
         >
-          <span className="relative z-10">All Products</span>
+          <span className="relative z-10">{category.name}</span>
         </Link>
-        {categories.map((category) => (
-          <Link
-            key={category._id}
-            href={`/search?category=${category.slug}&sort=createdAt&order=desc&page=1&limit=20`}
-            className={cn(
-              "group relative block overflow-hidden rounded-lg px-3 py-2.5 transition-all duration-300",
-              "before:absolute before:inset-0 before:bg-linear-to-r before:from-[hsl(var(--accent-strong))]/25 before:to-transparent before:opacity-0 before:-translate-x-4 before:transition-all before:duration-300 before:ease-out",
-              "hover:before:translate-x-0 hover:before:opacity-100",
-              isSearchPage && categoryFilter === category.slug &&
-                "bg-accent/80 font-medium after:absolute after:bottom-1.5 after:left-0 after:top-1.5 after:w-1 after:rounded-r-full after:bg-[hsl(var(--accent-strong))]",
-            )}
-            onClick={handleNavClick}
-          >
-            <span className="relative z-10">{category.name}</span>
-          </Link>
-        ))}
-      </nav>
-    </div>
+      ))}
+    </nav>
+  )
+}
+
+function SidebarNavFallback({
+  categories,
+  onNavClick,
+}: {
+  categories: Category[]
+  onNavClick: () => void
+}) {
+  return (
+    <nav className="space-y-1.5 px-3 pb-4">
+      <Link
+        href="/search?sort=createdAt&order=desc&page=1&limit=20"
+        className={cn(
+          "group relative block overflow-hidden rounded-lg px-3 py-2.5 transition-all duration-300",
+          "before:absolute before:inset-0 before:bg-linear-to-r before:from-[hsl(var(--accent-strong))]/25 before:to-transparent before:opacity-0 before:-translate-x-4 before:transition-all before:duration-300 before:ease-out",
+          "hover:before:translate-x-0 hover:before:opacity-100",
+        )}
+        onClick={onNavClick}
+      >
+        <span className="relative z-10">All Products</span>
+      </Link>
+      {categories.map((category) => (
+        <Link
+          key={category._id}
+          href={`/search?category=${category.slug}&sort=createdAt&order=desc&page=1&limit=20`}
+          className={cn(
+            "group relative block overflow-hidden rounded-lg px-3 py-2.5 transition-all duration-300",
+            "before:absolute before:inset-0 before:bg-linear-to-r before:from-[hsl(var(--accent-strong))]/25 before:to-transparent before:opacity-0 before:-translate-x-4 before:transition-all before:duration-300 before:ease-out",
+            "hover:before:translate-x-0 hover:before:opacity-100",
+          )}
+          onClick={onNavClick}
+        >
+          <span className="relative z-10">{category.name}</span>
+        </Link>
+      ))}
+    </nav>
   )
 }

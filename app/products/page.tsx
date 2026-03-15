@@ -6,6 +6,8 @@ import { getProducts } from "@/lib/api/products"
 import Sidebar from "@/components/sidebar"
 import NoticeBar from "@/components/notice-bar"
 
+export const dynamic = "force-dynamic"
+
 export default async function ProductsPage() {
   const products = await getProducts()
 

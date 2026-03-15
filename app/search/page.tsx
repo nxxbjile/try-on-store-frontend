@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import Header from "@/components/header"
 import NoticeBar from "@/components/notice-bar"
@@ -36,6 +36,14 @@ const ORDER_OPTIONS = [
 const LIMIT_OPTIONS = [12, 20, 40]
 
 export default function SearchPage() {
+  return (
+    <Suspense fallback={<SearchPageFallback />}>
+      <SearchPageContent />
+    </Suspense>
+  )
+}
+
+function SearchPageContent() {
   const { getProducts } = useStore()
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -287,6 +295,25 @@ export default function SearchPage() {
                 Next
               </Button>
             </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  )
+}
+
+function SearchPageFallback() {
+  return (
+    <main className="min-h-screen bg-[hsl(var(--surface-1))]">
+      <NoticeBar />
+      <Header />
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex relative">
+          <Sidebar />
+          <div className="w-full flex-1">
+            <Card className="border-border/70">
+              <CardContent className="py-10 text-center text-muted-foreground">Loading search...</CardContent>
+            </Card>
           </div>
         </div>
       </div>

@@ -8,6 +8,8 @@ import Sidebar from "@/components/sidebar"
 import NoticeBar from "@/components/notice-bar"
 import RecommendedProducts from "@/components/recommended-products"
 
+export const dynamic = "force-dynamic"
+
 export default async function ProductPage( {params}: any) {
   let product: ProductWithDetails | null = null
   const { id } = await params;
