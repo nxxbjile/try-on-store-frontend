@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -34,6 +34,8 @@ export default function ProductDetails({ product }: ProductProps) {
   const [quantity, setQuantity] = useState(1)
   const [activeImage, setActiveImage] = useState(0)
   const [failedImages, setFailedImages] = useState<Record<number, boolean>>({})
+  const touchStartX = useRef<number | null>(null)
+  const touchCurrentX = useRef<number | null>(null)
   const { addToCart } = useStore()
   const { toast } = useToast()
 
@@ -97,6 +99,37 @@ export default function ProductDetails({ product }: ProductProps) {
     setActiveImage((prev) => (prev - 1 + galleryImages.length) % galleryImages.length)
   }
 
+  const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    touchStartX.current = event.touches[0]?.clientX ?? null
+    touchCurrentX.current = null
+  }
+
+  const handleTouchMove = (event: React.TouchEvent<HTMLDivElement>) => {
+    touchCurrentX.current = event.touches[0]?.clientX ?? null
+  }
+
+  const handleTouchEnd = () => {
+    if (galleryImages.length <= 1) return
+
+    if (touchStartX.current === null || touchCurrentX.current === null) {
+      touchStartX.current = null
+      touchCurrentX.current = null
+      return
+    }
+
+    const swipeDistance = touchStartX.current - touchCurrentX.current
+    const minSwipeDistance = 45
+
+    if (swipeDistance > minSwipeDistance) {
+      nextImage()
+    } else if (swipeDistance < -minSwipeDistance) {
+      prevImage()
+    }
+
+    touchStartX.current = null
+    touchCurrentX.current = null
+  }
+
   const currentImage = failedImages[activeImage]
     ? "/placeholder.svg?height=900&width=900"
     : galleryImages[activeImage]
@@ -106,7 +139,12 @@ export default function ProductDetails({ product }: ProductProps) {
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] xl:gap-10">
         <div className="space-y-4">
           <div className="relative overflow-hidden rounded-2xl border border-border/80 bg-[hsl(var(--surface-1))] shadow-sm">
-            <div className="relative aspect-square">
+            <div
+              className="relative aspect-square"
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+            >
               <Image
                 src={currentImage || "/placeholder.svg?height=900&width=900"}
                 alt={`${product.name} preview ${activeImage + 1}`}
@@ -129,7 +167,7 @@ export default function ProductDetails({ product }: ProductProps) {
                   type="button"
                   variant="secondary"
                   size="icon"
-                  className="absolute left-3 top-1/2 h-9 w-9 -translate-y-1/2 rounded-full border border-border/70 bg-background/85"
+                  className="absolute left-3 top-1/2 hidden h-9 w-9 -translate-y-1/2 rounded-full border border-border/70 bg-background/85 sm:inline-flex"
                   onClick={prevImage}
                 >
                   <ChevronLeft className="h-4 w-4" />
@@ -139,12 +177,21 @@ export default function ProductDetails({ product }: ProductProps) {
                   type="button"
                   variant="secondary"
                   size="icon"
-                  className="absolute right-3 top-1/2 h-9 w-9 -translate-y-1/2 rounded-full border border-border/70 bg-background/85"
+                  className="absolute right-3 top-1/2 hidden h-9 w-9 -translate-y-1/2 rounded-full border border-border/70 bg-background/85 sm:inline-flex"
                   onClick={nextImage}
                 >
                   <ChevronRight className="h-4 w-4" />
                   <span className="sr-only">Next image</span>
                 </Button>
+
+                <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-background/75 px-2 py-1 sm:hidden">
+                  {galleryImages.map((_, index) => (
+                    <span
+                      key={`dot-${index}`}
+                      className={`h-1.5 w-1.5 rounded-full transition ${activeImage === index ? "bg-primary" : "bg-muted-foreground/40"}`}
+                    />
+                  ))}
+                </div>
               </>
             ) : null}
           </div>

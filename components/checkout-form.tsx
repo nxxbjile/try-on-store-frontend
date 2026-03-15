@@ -2,21 +2,30 @@
 
 import type React from "react"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth, useUser } from "@clerk/nextjs"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import { fetchBackendUserProfile } from "@/lib/api/user-sync"
+import { loadRazorpayScript } from "@/lib/razorpay"
 import { useStore } from "@/lib/store"
+import { nanoid } from "nanoid"
+
+type RazorpaySuccessPayload = {
+  razorpay_payment_id: string
+  razorpay_order_id: string
+  razorpay_signature: string
+}
+
+const RAZORPAY_KEY_ID = process.env.NEXT_PUBLIC_RAZORPAY_TEST_KEY_ID || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || ""
 
 export default function CheckoutForm() {
-  const { cartItems, clearCart, createOrder } = useStore();
+  const { cartItems, getCartItems, createPaymentOrder, verifyPayment, cancelPaymentIntent } = useStore()
   const { user } = useUser()
   const { isLoaded, isSignedIn, getToken } = useAuth()
   const { toast } = useToast()
@@ -29,11 +38,11 @@ export default function CheckoutForm() {
     state: "Delhi / New Delhi Only",
     zipCode: "",
     phone: "",
-    paymentMethod: "cash",
     notes: "",
   })
 
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const submitInFlightRef = useRef(false)
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn || !user) return
@@ -91,12 +100,69 @@ export default function CheckoutForm() {
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
-  const handlePaymentMethodChange = (value: string) => {
-    setFormData((prev) => ({ ...prev, paymentMethod: value }))
+  const openRazorpayPopup = async (opts: {
+    keyId: string
+    amount: number
+    currency: string
+    razorpayOrderId: string
+  }) => {
+    if (typeof window === "undefined" || !window.Razorpay) {
+      throw new Error("Razorpay SDK is not available")
+    }
+
+    const RazorpayCtor = window.Razorpay
+    if (!RazorpayCtor) {
+      throw new Error("Razorpay SDK is not available")
+    }
+
+    return await new Promise<RazorpaySuccessPayload>((resolve, reject) => {
+      let settled = false
+
+      const safeResolve = (response: RazorpaySuccessPayload) => {
+        if (settled) return
+        settled = true
+        resolve(response)
+      }
+
+      const safeReject = (error: Error) => {
+        if (settled) return
+        settled = true
+        reject(error)
+      }
+
+      const instance = new RazorpayCtor({
+        key: opts.keyId,
+        amount: opts.amount,
+        currency: opts.currency,
+        name: "Try-On Store",
+        description: "Advance payment for your order",
+        order_id: opts.razorpayOrderId,
+        prefill: {
+          name: formData.name,
+          email: formData.email,
+          contact: formData.phone,
+        },
+        theme: {
+          color: "#111827",
+        },
+        modal: {
+          ondismiss: () => safeReject(new Error("Payment cancelled by user")),
+        },
+        handler: (response) => {
+          safeResolve(response)
+        },
+      })
+
+      instance.open()
+    })
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (submitInFlightRef.current) {
+      return
+    }
 
     if (!isSignedIn) {
       toast({
@@ -109,32 +175,148 @@ export default function CheckoutForm() {
     }
 
     setIsSubmitting(true)
+    submitInFlightRef.current = true
+    let paymentIntentId = ""
 
-    try {
-      // In a real app, we would submit the order to the API
-      const orderPlaced = await createOrder(cartItems, formData.address, formData.notes );
+    const executeCreatePaymentOrder = async (items: { product: string; size: string; quantity: number }[]) => {
+      const buildInitKey = () => `init:${nanoid()}`
 
-      if( !orderPlaced ) {
-        toast({
-          title:"Cannot place order",
-          description:"Order Not placed due to technical issue"
+      try {
+        return await createPaymentOrder({
+          items,
+          shippingAddress: formData.address,
+          notes: formData.notes,
+          method: "razorpay",
+          idempotencyKey: buildInitKey(),
+        })
+      } catch (error) {
+        const message = error instanceof Error ? error.message.toLowerCase() : ""
+        const isDuplicate = message.includes("duplicate idempotency")
+
+        if (!isDuplicate) {
+          throw error
+        }
+
+        // Retry once with a fresh idempotency key in case a stale key reached the API layer.
+        return await createPaymentOrder({
+          items,
+          shippingAddress: formData.address,
+          notes: formData.notes,
+          method: "razorpay",
+          idempotencyKey: buildInitKey(),
         })
       }
-      toast({
-        title: "Order placed successfully",
-        description: "Thank you for your purchase!",
+    }
+
+    const executeVerifyPayment = async (payload: {
+      paymentIntentId: string
+      razorpay_order_id: string
+      razorpay_payment_id: string
+      razorpay_signature: string
+    }) => {
+      const buildConfirmKey = () => `confirm:${nanoid()}`
+
+      try {
+        return await verifyPayment({
+          ...payload,
+          providerPayload: {
+            checkoutSource: "web",
+          },
+          idempotencyKey: buildConfirmKey(),
+        })
+      } catch (error) {
+        const message = error instanceof Error ? error.message.toLowerCase() : ""
+        const isDuplicate = message.includes("duplicate idempotency")
+
+        if (!isDuplicate) {
+          throw error
+        }
+
+        // Retry once with a fresh idempotency key in case a stale key reached the API layer.
+        return await verifyPayment({
+          ...payload,
+          providerPayload: {
+            checkoutSource: "web",
+          },
+          idempotencyKey: buildConfirmKey(),
+        })
+      }
+    }
+
+    try {
+      await loadRazorpayScript()
+
+      const items = cartItems.map((item) => ({
+        product: item.product,
+        size: item.size,
+        quantity: item.quantity,
+      }))
+
+      const paymentOrder = await executeCreatePaymentOrder(items)
+
+      paymentIntentId = paymentOrder?.paymentIntent?._id || ""
+      if (!paymentIntentId) {
+        throw new Error("Payment intent was not created")
+      }
+
+      const razorpayKey = paymentOrder?.razorpay?.keyId || RAZORPAY_KEY_ID
+      if (!razorpayKey) {
+        throw new Error("Razorpay key is missing from backend response")
+      }
+
+      const razorpayOrderId = paymentOrder?.razorpay?.orderId
+      if (!razorpayOrderId) {
+        throw new Error("Razorpay order id missing from initiate response")
+      }
+
+      const paymentResult = await openRazorpayPopup({
+        keyId: razorpayKey,
+        amount: paymentOrder.razorpay.amount,
+        currency: paymentOrder.razorpay.currency,
+        razorpayOrderId,
       })
 
-      await clearCart()
-      router.push("/order-confirmation")
-    } catch (error) {
+      const confirmation = await executeVerifyPayment({
+        paymentIntentId,
+        razorpay_order_id: paymentResult.razorpay_order_id,
+        razorpay_payment_id: paymentResult.razorpay_payment_id,
+        razorpay_signature: paymentResult.razorpay_signature,
+      })
+
+      const orderId = confirmation?.order?._id
+      if (!orderId) {
+        throw new Error("Payment confirmed but order id was not returned")
+      }
+
       toast({
-        title: "Failed to place order",
-        description: "Please try again later.",
+        title: "Order placed successfully",
+        description: "Payment completed and order confirmed.",
+      })
+
+      await getCartItems()
+      paymentIntentId = ""
+      router.push(`/order-confirmation?orderId=${encodeURIComponent(orderId)}`)
+    } catch (error) {
+      if (paymentIntentId) {
+        try {
+          await cancelPaymentIntent({
+            paymentIntentId,
+            reason: "User cancelled payment or checkout failed",
+          })
+        } catch {
+          // Best effort cleanup only.
+        }
+      }
+
+      const description = error instanceof Error ? error.message : "Please try again later."
+      toast({
+        title: "Checkout failed",
+        description,
         variant: "destructive",
       })
     } finally {
       setIsSubmitting(false)
+      submitInFlightRef.current = false
     }
   }
 
@@ -186,64 +368,12 @@ export default function CheckoutForm() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Payment Method</CardTitle>
+            <CardTitle>Payment</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <RadioGroup value={formData.paymentMethod} onValueChange={handlePaymentMethodChange} className="space-y-3">
-              {/* <div className="flex items-center space-x-2">
-                <RadioGroupItem value="credit-card" id="credit-card" />
-                <Label htmlFor="credit-card">Credit Card</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="paypal" id="paypal" />
-                <Label htmlFor="paypal">PayPal</Label>
-              </div> */}
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="cash" id="cash" />
-                <Label htmlFor="cash">Cash on Delivery</Label>
-              </div>
-            </RadioGroup>
-
-            {/* {formData.paymentMethod === "credit-card" && (
-              <div className="space-y-4 mt-4">
-                <div className="space-y-2">
-                  <Label htmlFor="cardNumber">Card Number</Label>
-                  <Input
-                    id="cardNumber"
-                    name="cardNumber"
-                    placeholder="1234 5678 9012 3456"
-                    value={formData.cardNumber}
-                    onChange={handleChange}
-                    required={formData.paymentMethod === "credit-card"}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="cardExpiry">Expiry Date</Label>
-                    <Input
-                      id="cardExpiry"
-                      name="cardExpiry"
-                      placeholder="MM/YY"
-                      value={formData.cardExpiry}
-                      onChange={handleChange}
-                      required={formData.paymentMethod === "credit-card"}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="cardCvc">CVC</Label>
-                    <Input
-                      id="cardCvc"
-                      name="cardCvc"
-                      placeholder="123"
-                      value={formData.cardCvc}
-                      onChange={handleChange}
-                      required={formData.paymentMethod === "credit-card"}
-                    />
-                  </div>
-                </div>
-              </div>
-             )} */}
+            <p className="rounded-md border border-border/70 bg-muted/30 p-3 text-sm text-muted-foreground">
+              Prepayment is required. You will complete payment securely in Razorpay test mode before your order is placed.
+            </p>
           </CardContent>
         </Card>
 
@@ -266,7 +396,7 @@ export default function CheckoutForm() {
         </Card>
 
         <Button type="submit" className="w-full" disabled={isSubmitting || cartItems.length === 0}>
-          {isSubmitting ? "Processing..." : "Place Order"}
+          {isSubmitting ? "Processing payment..." : "Pay & Place Order"}
         </Button>
       </div>
     </form>

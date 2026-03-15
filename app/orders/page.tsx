@@ -32,6 +32,10 @@ export type Order = {
   user:any
   products: OrderProduct[]
   status: OrderStatus
+  paymentStatus?: "pending" | "completed" | "failed" | "refunded"
+  payment?: {
+    status?: "pending" | "completed" | "failed" | "refunded"
+  }
   totalAmount: number
   createdAt: string
   updatedAt: string
@@ -69,6 +73,10 @@ export default function OrdersPage() {
   
 
   const filteredOrders = activeTab === "all" ? orders : orders.filter((order) => order.status === activeTab)
+
+  const getPaymentStatus = (order: Order) => {
+    return order.paymentStatus || order.payment?.status || "pending"
+  }
 
   const getStatusColor = (status: OrderStatus) => {
     switch (status) {
@@ -135,13 +143,25 @@ export default function OrdersPage() {
                                   <CardDescription>
                                     Placed on {new Date(order.createdAt).toLocaleDateString()}
                                   </CardDescription>
+                                  {order.status === "pending" && getPaymentStatus(order) === "completed" ? (
+                                    <p className="mt-2 text-xs text-muted-foreground">
+                                      Payment received. Your order is pending dispatch/delivery updates.
+                                    </p>
+                                  ) : null}
                                 </div>
-                                <Badge
-                                  variant="outline"
-                                  className={`${getStatusColor(order.status)} text-white mt-2 md:mt-0`}
-                                >
-                                  {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-                                </Badge>
+                                <div className="mt-2 flex flex-wrap gap-2 md:mt-0 md:justify-end">
+                                  <Badge
+                                    variant="outline"
+                                    className={`${getStatusColor(order.status)} text-white`}
+                                  >
+                                    {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                                  </Badge>
+                                  {order.status === "pending" && getPaymentStatus(order) === "completed" ? (
+                                    <Badge variant="outline" className="border-green-600/40 bg-green-600 text-white">
+                                      Paid
+                                    </Badge>
+                                  ) : null}
+                                </div>
                               </div>
                             </CardHeader>
                             <CardContent>

@@ -122,6 +122,82 @@ type TryonImage = {
   updatedAt: string
 }
 
+type OrderProductInput = {
+  product: string
+  size: string
+  quantity: number
+}
+
+type CreatePaymentOrderPayload = {
+  items: OrderProductInput[]
+  shippingAddress: string
+  notes?: string
+  method?: "razorpay" | "card" | "upi" | "netbanking" | "wallet" | "mock_prepaid"
+  idempotencyKey?: string
+}
+
+type PaymentOrderResponse = {
+  paymentIntent: {
+    _id: string
+    status: "pending" | "completed" | "failed" | "refunded" | "cancelled"
+    amount: number
+    checkoutSnapshot?: {
+      items: Array<{
+        product: string
+        size: string
+        quantity: number
+        lineTotal: number
+      }>
+      shippingAddress: string
+      notes?: string
+      subtotal: number
+      taxAmount: number
+      totalAmount: number
+      currency: string
+    }
+    providerPayload?: {
+      razorpayOrderId?: string
+      razorpayOrderAmount?: number
+      razorpayOrderCurrency?: string
+    }
+  }
+  razorpay: {
+    keyId: string
+    orderId: string
+    amount: number
+    currency: string
+  }
+  nextAction?: string
+  instructions?: string
+}
+
+type VerifyPaymentPayload = {
+  paymentIntentId: string
+  razorpay_order_id: string
+  razorpay_payment_id: string
+  razorpay_signature: string
+  providerPayload?: Record<string, unknown>
+  idempotencyKey?: string
+}
+
+type VerifyPaymentResponse = {
+  message?: string
+  payment?: {
+    _id: string
+    status: "pending" | "completed" | "failed" | "refunded" | "cancelled"
+  }
+  order?: {
+    _id: string
+    paymentStatus?: string
+    paymentId?: string
+  }
+}
+
+type CancelPaymentIntentPayload = {
+  paymentIntentId: string
+  reason?: string
+}
+
 // Store type
 type StoreState = {
   hasHydrated: boolean,
@@ -157,7 +233,12 @@ type StoreState = {
   getTryonForProduct: (productId: string) => TryonImage | null
 
   // Orders CRUD
-  createOrder: (products: { product: string, size: string, quantity: number }[], shippingAddress: string, notes: string) => Promise<any>
+  paymentInProgress: boolean
+  paymentError: string | null
+  createPaymentOrder: (payload: CreatePaymentOrderPayload) => Promise<PaymentOrderResponse>
+  verifyPayment: (payload: VerifyPaymentPayload) => Promise<VerifyPaymentResponse>
+  cancelPaymentIntent: (payload: CancelPaymentIntentPayload) => Promise<any>
+  createOrder: (products: OrderProductInput[], shippingAddress: string, notes: string) => Promise<any>
   getOrders: (params?: Record<string, any>) => Promise<any>
   getOrder: (orderId: string) => Promise<any>
   updateOrder: (orderId: string, update: any) => Promise<any>
@@ -483,6 +564,71 @@ export const useStore = create<StoreState>()(
       },
 
       // Orders CRUD
+      paymentInProgress: false,
+      paymentError: null,
+      createPaymentOrder: async (payload) => {
+        set({ paymentInProgress: true, paymentError: null })
+        try {
+          const data = await apiRequest("/payments/initiate", {
+            method: "POST",
+            data: {
+              items: payload.items,
+              shippingAddress: payload.shippingAddress,
+              ...(payload.notes ? { notes: payload.notes } : {}),
+              method: payload.method || "razorpay",
+              ...(payload.idempotencyKey ? { idempotencyKey: payload.idempotencyKey } : {}),
+            },
+          })
+
+          return data as PaymentOrderResponse
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Failed to create payment order"
+          set({ paymentError: message })
+          throw error
+        } finally {
+          set({ paymentInProgress: false })
+        }
+      },
+      verifyPayment: async (payload) => {
+        set({ paymentInProgress: true, paymentError: null })
+        try {
+          const data = await apiRequest("/payments/confirm-and-create-order", {
+            method: "POST",
+            data: {
+              paymentIntentId: payload.paymentIntentId,
+              razorpay_order_id: payload.razorpay_order_id,
+              razorpay_payment_id: payload.razorpay_payment_id,
+              razorpay_signature: payload.razorpay_signature,
+              ...(payload.providerPayload ? { providerPayload: payload.providerPayload } : {}),
+              ...(payload.idempotencyKey ? { idempotencyKey: payload.idempotencyKey } : {}),
+            },
+          })
+
+          return data as VerifyPaymentResponse
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Payment verification failed"
+          set({ paymentError: message })
+          throw error
+        } finally {
+          set({ paymentInProgress: false })
+        }
+      },
+      cancelPaymentIntent: async (payload) => {
+        try {
+          const data = await apiRequest("/payments/cancel-intent", {
+            method: "POST",
+            data: {
+              paymentIntentId: payload.paymentIntentId,
+              ...(payload.reason ? { reason: payload.reason } : {}),
+            },
+          })
+          return data
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Failed to cancel payment intent"
+          set({ paymentError: message })
+          throw error
+        }
+      },
       createOrder: async (products, shippingAddress, notes = "") => {
         try {
           const data = await apiRequest("/orders", {
@@ -676,6 +822,7 @@ export const useStore = create<StoreState>()(
         theme: state.theme,
         themePreset: state.themePreset,
         uiDensity: state.uiDensity,
+        paymentError: state.paymentError,
       }),
     },
   ),

@@ -3,10 +3,13 @@ import { CheckCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 
-export default function OrderConfirmationPage() {
-  // In a real app, we would fetch the order details from the API
-  // For now, we'll use mock data
-  const orderNumber = `ORD-${Math.floor(100000 + Math.random() * 900000)}`
+export default function OrderConfirmationPage({
+  searchParams,
+}: {
+  searchParams?: Record<string, string | string[] | undefined>
+}) {
+  const rawOrderId = searchParams?.orderId
+  const orderNumber = typeof rawOrderId === "string" && rawOrderId.trim().length > 0 ? rawOrderId : "Pending"
   const orderDate = new Date().toLocaleDateString()
   const estimatedDelivery = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString()
 

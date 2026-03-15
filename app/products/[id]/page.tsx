@@ -32,7 +32,7 @@ export default async function ProductPage( {params}: any) {
             <Suspense fallback={<ProductDetailsSkeleton />}>
               <ProductDetails product={product} />
             </Suspense>
-            <RecommendedProducts currentProductId={product._id} />
+            <RecommendedProducts currentProductId={product._id} currentCategory={product.category} />
           </div>
         </div>
       </div>

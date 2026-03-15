@@ -9,22 +9,37 @@ import { useStore } from "@/lib/store"
 
 type RecommendedProductsProps = {
   currentProductId?: string
+  currentCategory?: "shirt" | "t-shirt" | "pants"
 }
 
-export default function RecommendedProducts({ currentProductId }: RecommendedProductsProps) {
-  const products = useStore((state) => state.products)
+export default function RecommendedProducts({ currentProductId, currentCategory }: RecommendedProductsProps) {
   const getProducts = useStore((state) => state.getProducts)
   const [isLoading, setIsLoading] = useState(false)
+  const [recommended, setRecommended] = useState<any[]>([])
 
   useEffect(() => {
     let mounted = true
 
-    const hydrateProducts = async () => {
-      if (products.length > 0) return
+    const fetchRecommendedProducts = async () => {
       setIsLoading(true)
       try {
-        await getProducts()
+        const result = await getProducts({
+          category: currentCategory,
+          page: 1,
+          limit: 24,
+          sort: "createdAt",
+          order: "desc",
+        })
+
+        const list = Array.isArray(result?.products) ? result.products : []
+
+        if (mounted) {
+          setRecommended(list)
+        }
       } catch {
+        if (mounted) {
+          setRecommended([])
+        }
         // Keep section resilient if recommendations fail.
       } finally {
         if (mounted) {
@@ -33,23 +48,23 @@ export default function RecommendedProducts({ currentProductId }: RecommendedPro
       }
     }
 
-    void hydrateProducts()
+    void fetchRecommendedProducts()
 
     return () => {
       mounted = false
     }
-  }, [getProducts, products.length])
+  }, [currentCategory, currentProductId, getProducts])
 
   const visibleProducts = useMemo(() => {
-    return products.filter((p) => p._id !== currentProductId).slice(0, 4)
-  }, [currentProductId, products])
+    return recommended.filter((p) => p._id !== currentProductId).slice(0, 8)
+  }, [currentProductId, recommended])
 
   return (
     <section className="mt-12 rounded-2xl border border-border/70 bg-[hsl(var(--surface-2))]/35 p-5 sm:p-6">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">Recommended For You</h2>
-          <p className="text-sm text-muted-foreground">Showing normal products from your store list.</p>
+          <p className="text-sm text-muted-foreground">Showing products from the same category.</p>
         </div>
         <Button asChild variant="outline" className="rounded-xl">
           <Link href="/products">See All</Link>
@@ -59,7 +74,7 @@ export default function RecommendedProducts({ currentProductId }: RecommendedPro
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading products...</p>
       ) : visibleProducts.length > 0 ? (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
           {visibleProducts.map((item) => {
             const discounted = item.discount ? item.price * (1 - item.discount / 100) : item.price
             return (
@@ -81,7 +96,7 @@ export default function RecommendedProducts({ currentProductId }: RecommendedPro
                     </span>
                   ) : null}
                 </div>
-                <div className="space-y-1.5 p-3.5">
+                <div className="space-y-1 p-3">
                   <p className="line-clamp-1 text-sm font-medium">{item.name}</p>
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold">{formatPrice(discounted)}</span>
